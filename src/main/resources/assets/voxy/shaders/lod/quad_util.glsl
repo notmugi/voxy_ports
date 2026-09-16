@@ -63,6 +63,10 @@ uint makeQuadFlags(uint faceData, uint modelId, ivec2 quadSize, const in BlockMo
 
     flags |= faceTintState(faceData)<<2;
     flags |= face<<4;//Face
+    #ifndef PATCHED_SHADER
+    // Free bit 7: foliage overlap exclusion. Leave Iris's flags unchanged.
+    flags |= ((model.flagsA >> 8u) & 1u) << 7u;
+    #endif
 
     return flags;
 }
@@ -99,9 +103,14 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
     bool isShaded = modelIsShaded(model);
     bool hasAO = isShaded;
 
+    // Vanilla light samples for emitters must not fall below their own emission.
+    // Fluids use adjacent mesh light, which can be zero in cached/coarse LODs.
+    // Keep the shaderpack path's raw light contract unchanged.
+    uint emission = (model.flagsA >> 4u) & 15u;
+    lighting = (lighting & 15u) | (max(lighting >> 4u, emission) << 4u);
     vec4 tinting = getLighting(lighting);
 
-    uint conditionalTinting = 0;
+    uint conditionalTinting = uint(-1);//White/no tint must remain neutral, never black
     if (tintColour != uint(-1)) {
         conditionalTinting = tintColour;
     }
@@ -144,11 +153,18 @@ void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool genera
     }
 
     vec4 faceSize = getFaceSize(faceData);
+    float depthOffset = extractFaceIndentation(faceData);
+    // Bits 42..45 were unused in the packed quad. Stair patches carry
+    // two half-face coordinates and their exact boundary/inset depth.
+    uint geometryPatch = extractGeometryPatch(rawQuad);
+    if ((geometryPatch & 8u) != 0u) {
+        faceSize = vec4(float(geometryPatch & 1u) * .5, .5, float((geometryPatch >> 1u) & 1u) * .5, .5);
+        depthOffset = float((geometryPatch >> 2u) & 1u) * .5;
+    }
     #ifdef USE_SINGLE_TRI
     faceSize *= 2;
     #endif
     vec3 quadStart = extractPos(rawQuad);
-    float depthOffset = extractFaceIndentation(faceData);
     quadStart += swizzelDataAxis(face>>1, vec3(faceSize.xz, mix(depthOffset, 1-depthOffset, float(face&1u))));
 
     quad.lodScale = lodScale;
@@ -159,6 +175,14 @@ void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool genera
     #else
     quad.quadSizeAddin = faceSize.yw + quadSize - 1;
     #endif
+    if ((geometryPatch & 8u) != 0u) {
+        // Stair size fields count half-blocks, not whole blocks. Texture UVs
+        // still repeat once per block, including across greedily merged treads.
+        quad.quadSizeAddin = vec2(quadSize) * .5;
+        #ifdef USE_SINGLE_TRI
+        quad.quadSizeAddin *= 2;
+        #endif
+    }
     quad.uvCorner = faceSize.xz;
 }
 

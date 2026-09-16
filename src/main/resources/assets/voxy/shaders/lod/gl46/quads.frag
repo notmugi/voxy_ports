@@ -156,14 +156,24 @@ void main() {
         return;
     }
 
-    //Check the minimum bounding texture and ensure we are greater than it
-    //DISABLED: This AABB-based culling causes gaps at the vanilla/LOD boundary
-        //because the AABB covers the full chunk area but vanilla geometry (especially water)
-        //doesn't fill the edges. Relying on actual depth buffer instead.
-        //if (gl_FragCoord.z < texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r - 0.0001) {
-        //    discard;
-        //    return;
-        //}
+    #if !defined(PATCHED_SHADER) && !defined(TRANSLUCENT)
+    // Vanilla cutout holes have no depth and cannot mask a solid LOD copy
+    // of the same tree. Exclude foliage inside built Sodium section bounds.
+    // Do NOT apply this to ground or fluids: coarse bounds can hide their
+    // boundary gap-fill geometry. Preserve the shaderpack path as well.
+    if ((interData.x & 128u) != 0u) {
+        float sectionExitDepth = texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r;
+        // A leaf top can coincide with the section's exit face when viewed
+        // from below. Include that boundary, undo outline.vsh's clip-z bias,
+        // and allow two D24 steps for rasterization/rounding disagreement.
+        // A fixed negative window-depth tolerance leaves these faces solid.
+        float exitTolerance = 0.00025 * gl_FragCoord.w + 2.0 / 16777215.0;
+        if (sectionExitDepth > 0.0 && gl_FragCoord.z <= sectionExitDepth + exitTolerance) {
+            discard;
+            return;
+        }
+    }
+    #endif
 
 
     //Also, small quad is really fking over the mipping level somehow

@@ -223,6 +223,7 @@ public class ModelTextureBakery {
         if (isBlock) {
             this.vc.reset();
             this.bakeBlockModel(state, layer);
+            isAnyShaded |= this.vc.anyShaded;
             if (!this.vc.isEmpty()) {//only render if there... is shit to render
 
                 //Setup for continual emission

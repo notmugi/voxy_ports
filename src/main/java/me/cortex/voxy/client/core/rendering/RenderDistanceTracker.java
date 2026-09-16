@@ -6,7 +6,6 @@ import me.cortex.voxy.common.world.WorldEngine;
 import java.util.function.LongConsumer;
 
 public class RenderDistanceTracker {
-    private static final int CHECK_DISTANCE_BLOCKS = 128;
     private final LongConsumer addTopLevelNode;
     private final LongConsumer removeTopLevelNode;
     private final int processRate;
@@ -32,17 +31,15 @@ public class RenderDistanceTracker {
         }
         this.renderDistance = renderDistance;
         this.tracker.unload();//Mark all as unload
-        this.tracker = new RingTracker(this.tracker, renderDistance, ((int)this.posX)>>9, ((int)this.posZ)>>9, true);//Steal from previous tracker
+        this.tracker = new RingTracker(this.tracker, renderDistance, ((int)Math.floor(this.posX))>>9, ((int)Math.floor(this.posZ))>>9, true);//Steal from previous tracker
     }
 
     public boolean setCenterAndProcess(double x, double z) {
-        double dx = this.posX-x;
-        double dz = this.posZ-z;
-        if (CHECK_DISTANCE_BLOCKS*CHECK_DISTANCE_BLOCKS<dx*dx+dz*dz) {
-            this.posX = x;
-            this.posZ = z;
-            this.tracker.moveCenter(((int)x)>>9, ((int)z)>>9);
-        }
+        this.posX = x;
+        this.posZ = z;
+        // moveCenter is a no-op within a root cell. Do not delay boundary crossings;
+        // floor before shifting also handles fractional negative coordinates correctly.
+        this.tracker.moveCenter(((int)Math.floor(x))>>9, ((int)Math.floor(z))>>9);
         return this.tracker.process(this.processRate, this::add, this::rem)!=0;
     }
 

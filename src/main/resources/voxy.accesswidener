@@ -5,7 +5,7 @@ accessible class net/minecraft/client/multiplayer/ClientChunkCache$Storage
 
 accessible field net/minecraft/client/multiplayer/ClientLevel levelRenderer Lnet/minecraft/client/renderer/LevelRenderer;
 #accessible field com/mojang/blaze3d/opengl/GlBuffer handle I
-#accessible field net/minecraft/client/color/block/BlockColors blockColors Lnet/minecraft/core/IdMapper;
+accessible field net/minecraft/client/color/block/BlockColors blockColors Lnet/minecraft/core/IdMapper;
 accessible field net/minecraft/client/renderer/texture/TextureAtlas mipLevel I
 accessible field net/minecraft/client/gui/components/BossHealthOverlay events Ljava/util/Map;
 accessible field net/minecraft/client/multiplayer/MultiPlayerGameMode connection Lnet/minecraft/client/multiplayer/ClientPacketListener;

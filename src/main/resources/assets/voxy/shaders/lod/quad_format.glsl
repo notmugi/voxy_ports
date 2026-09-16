@@ -28,6 +28,8 @@ uint extractLightId(uint64_t quad) {
     return Eu32(quad, 8, 55);
 }
 
+uint extractGeometryPatch(uint64_t quad) { return Eu32(quad, 4, 42); }
+
 bool isQuadEmpty(uint64_t quad) {
     return quad == uint64_t(0);
 }
@@ -62,7 +64,7 @@ uint extractFace(ivec2 quad) {
 
 uint extractStateId(ivec2 quad) {
     //Eu32(quad, 20, 26);
-    return Eu32v(quad, 6, 26)|(Eu32v(quad, 14, 32)<<6);
+    return Eu32v(quad, 6, 26)|(Eu32v(quad, 10, 32)<<6);
 }
 
 uint extractBiomeId(ivec2 quad) {
@@ -72,6 +74,8 @@ uint extractBiomeId(ivec2 quad) {
 uint extractLightId(ivec2 quad) {
     return Eu32v(quad, 8, 55);
 }
+
+uint extractGeometryPatch(ivec2 quad) { return Eu32v(quad, 4, 42); }
 
 bool isQuadEmpty(ivec2 quad) {
     return all(equal(quad, ivec2(0)));

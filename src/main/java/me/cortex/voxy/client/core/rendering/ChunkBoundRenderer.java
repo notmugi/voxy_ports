@@ -86,9 +86,16 @@ public class ChunkBoundRenderer {
             }
         }
 
-        if (this.chunk2idx.isEmpty() && this.addQueue.isEmpty()) return;
-
+        // Consume additions before drawing: a newly uploaded Sodium leaf must
+        // exclude its LOD duplicate in this frame, not the following frame.
+        if (!this.addQueue.isEmpty()) {
+            this.addQueue.forEach(this::_addPos);
+            this.addQueue.clear();
+            UploadStream.INSTANCE.commit();
+        }
+        // Also clear after reset/last removal, including every active viewport.
         viewport.depthBoundingBuffer.clear(0);
+        if (this.chunk2idx.isEmpty()) return;
 
         long ptr = UploadStream.INSTANCE.upload(this.uniformBuffer, 0, 128);
         long matPtr = ptr; ptr += 4*4*4;
@@ -151,11 +158,6 @@ public class ChunkBoundRenderer {
         }
 
 
-        if (!this.addQueue.isEmpty()) {
-            this.addQueue.forEach(this::_addPos);//TODO: REPLACE WITH SCATTER COMPUTE
-            this.addQueue.clear();
-            UploadStream.INSTANCE.commit();
-        }
     }
 
     private void _remPos(long pos) {
@@ -225,6 +227,8 @@ public class ChunkBoundRenderer {
 
     public void reset() {
         this.chunk2idx.clear();
+        this.addQueue.clear();
+        this.remQueue.clear();
     }
 
     public void free() {

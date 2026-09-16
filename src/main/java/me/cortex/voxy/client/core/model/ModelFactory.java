@@ -33,6 +33,8 @@ import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LevelLightEngine;
@@ -69,9 +71,9 @@ public class ModelFactory {
 
     //TODO: replace the fluid BlockState with a client model id integer of the fluidState, requires looking up
     // the fluid state in the mipper
-    private record ModelEntry(ColourDepthTextureData down, ColourDepthTextureData up, ColourDepthTextureData north, ColourDepthTextureData south, ColourDepthTextureData west, ColourDepthTextureData east, int fluidBlockStateId, int tintingColour) {
-        public ModelEntry(ColourDepthTextureData[] textures, int fluidBlockStateId, int tintingColour) {
-            this(textures[0], textures[1], textures[2], textures[3], textures[4], textures[5], fluidBlockStateId, tintingColour);
+    private record ModelEntry(ColourDepthTextureData down, ColourDepthTextureData up, ColourDepthTextureData north, ColourDepthTextureData south, ColourDepthTextureData west, ColourDepthTextureData east, int fluidBlockStateId, int tintingColour, int lightingFlags, int stairShape) {
+        public ModelEntry(ColourDepthTextureData[] textures, int fluidBlockStateId, int tintingColour, int lightingFlags, int stairShape) {
+            this(textures[0], textures[1], textures[2], textures[3], textures[4], textures[5], fluidBlockStateId, tintingColour, lightingFlags, stairShape);
         }
     }
 
@@ -109,6 +111,9 @@ public class ModelFactory {
     // this has an issue with scaffolding i believe tho, so maybe make it a probability to render??? idk
     private final long[] metadataCache;
     private final int[] fluidStateLUT;
+    private final int[] stairShapes = new int[1 << 16];
+
+    public int getStairShape(int modelId) { return this.stairShapes[modelId]; }
 
     //Provides a map from id -> model id as multiple ids might have the same internal model id
     private final int[] idMappings;
@@ -356,7 +361,12 @@ public class ModelFactory {
         }
         this.blockStatesInFlightLock.unlock();
 
-        //TODO: add thing for `blockState.hasEmissiveLighting()` and `blockState.getLuminance()`
+        // Preserve block emission even when a fluid face borrows an unlit neighbour's
+        // light (or a coarse LOD sample has lost the emitter's original light value).
+        int lightingFlags = (blockState.getLightEmission() << 4) | (isShaded ? 8 : 0);
+        // Include leaf identity in both GPU flags and deduplication: only foliage
+        // needs loaded-terrain overlap rejection in the normal render path.
+        lightingFlags |= blockState.getBlock() instanceof LeavesBlock ? 1 << 8 : 0;
 
         boolean isFluid = blockState.getBlock() instanceof LiquidBlock;
         int modelId = -1;
@@ -383,9 +393,24 @@ public class ModelFactory {
             isBiomeColourDependent = isBiomeDependentColour(colourProvider, blockState);
         }
 
+        // Vanilla stairs are unions of half-block octants. Keep those surfaces
+        // separate instead of collapsing each projected face to its average depth.
+        int stairShape = 0;
+        if (blockState.getBlock() instanceof StairBlock) {
+            var boxes = blockState.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).toAabbs();
+            for (int z = 0; z < 2; z++) for (int y = 0; y < 2; y++) for (int x = 0; x < 2; x++) {
+                for (var box : boxes) {
+                    if (box.contains(x * .5 + .25, y * .5 + .25, z * .5 + .25)) {
+                        stairShape |= 1 << (x | (y << 1) | (z << 2));
+                        break;
+                    }
+                }
+            }
+        }
+
         ModelEntry entry;
         {//Deduplicate same entries
-            entry = new ModelEntry(textureData, clientFluidStateId, isBiomeColourDependent||colourProvider==null?-1:captureColourConstant(colourProvider, blockState, DEFAULT_BIOME)|0xFF000000);
+            entry = new ModelEntry(textureData, clientFluidStateId, isBiomeColourDependent||colourProvider==null?-1:captureColourConstant(colourProvider, blockState, DEFAULT_BIOME)|0xFF000000, lightingFlags, stairShape);
             int possibleDuplicate = this.modelTexture2id.getInt(entry);
             if (possibleDuplicate != -1) {//Duplicate found
                 this.idMappings[blockId] = possibleDuplicate;
@@ -536,8 +561,10 @@ public class ModelFactory {
 
 
             boolean canBeOccluded = true;
-            //TODO: make this an option on how far/close
-            canBeOccluded &= offset < 0.3;//If the face is rendered far away from the other face, then it cant be occluded
+            // An average near the boundary does not mean the whole surface is
+            // there: a stair top contains both the tread and the inset tread.
+            // Keep inset surfaces even beside a full neighbour.
+            canBeOccluded &= TextureUtils.computeDepth(textureData[face], TextureUtils.DEPTH_MODE_MAX, checkMode) < 0.01;
 
             metadata |= canBeOccluded?4:0;
 
@@ -590,6 +617,7 @@ public class ModelFactory {
         // i.e. no gaps
 
         this.metadataCache[modelId] = metadata;
+        this.stairShapes[modelId] = stairShape;
 
         uploadPtr += 4*6;
         //Have 40 bytes free for remaining model data
@@ -601,7 +629,7 @@ public class ModelFactory {
 
 
         //TODO: THIS
-        modelFlags |= isShaded?8:0;//model has AO and shade
+        modelFlags |= lightingFlags;//shade bit 3, emitted block light bits 4..7
 
         //modelFlags |= blockRenderLayer == RenderLayer.getSolid()?0:1;// should discard alpha
         MemoryUtil.memPutInt(uploadPtr, modelFlags); uploadPtr += 4;
@@ -733,13 +761,9 @@ public class ModelFactory {
     }
 
     private static BlockColor getColourProvider(Block block) {
-        BlockState defaultState = block.defaultBlockState();
-        var blockColors = Minecraft.getInstance().getBlockColors();
-        int color = blockColors.getColor(defaultState, null, BlockPos.ZERO, 0);
-        if (color != 0) {
-            return (state, world, pos, tintIndex) -> blockColors.getColor(state, world, pos, tintIndex);
-        }
-        return null;
+        // getColor returns -1 when no provider exists, NOT zero. Read the
+        // registered provider directly; zero is also a legitimate black tint.
+        return Minecraft.getInstance().getBlockColors().blockColors.byId(BuiltInRegistries.BLOCK.getId(block));
     }
 
     //TODO: add a method to detect biome dependent colours (can do by detecting if getColor is ever called)

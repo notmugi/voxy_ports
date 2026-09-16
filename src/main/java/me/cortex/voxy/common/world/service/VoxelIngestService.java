@@ -23,7 +23,23 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 public class VoxelIngestService {
     private static final ThreadLocal<VoxelizedSection> SECTION_CACHE = ThreadLocal.withInitial(VoxelizedSection::createEmpty);
     private final Service service;
-    private record IngestSection(int cx, int cy, int cz, WorldEngine world, LevelChunkSection section, DataLayer blockLight, DataLayer skyLight){}
+    private record IngestSection(int cx, int cy, int cz, WorldEngine world, LevelChunkSection section, DataLayer blockLight, DataLayer skyLight) {
+        private IngestSection {
+            blockLight = snapshotRawLight(blockLight);
+            skyLight = snapshotRawLight(skyLight);
+        }
+    }
+
+    private static DataLayer snapshotRawLight(DataLayer light) {
+        // NT's copy() retains a live wrapper whose get() applies the current time of day.
+        // Its getData() exposes the parent raw nibble data. Persist raw values, not a
+        // daylight step which will become stale as soon as the player leaves the chunk.
+        if (light != null && light.getClass().getName().equals(
+                "mod.adrenix.nostalgic.helper.candy.light.NostalgicDataLayer")) {
+            return new DataLayer(light.getData().clone());
+        }
+        return light;
+    }
     private final ConcurrentLinkedDeque<IngestSection> ingestQueue = new ConcurrentLinkedDeque<>();
 
     public VoxelIngestService(ServiceManager pool) {

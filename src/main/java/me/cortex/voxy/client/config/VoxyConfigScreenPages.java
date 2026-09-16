@@ -143,6 +143,13 @@ public abstract class VoxyConfigScreenPages {
                         .setBinding((s, v)-> s.renderVanillaFog = v, s -> s.renderVanillaFog)
                         .build()
                 ).add(OptionImpl.createBuilder(boolean.class, storage)
+                        .setName(Component.translatable("voxy.config.general.massive_clouds"))
+                        .setTooltip(Component.translatable("voxy.config.general.massive_clouds.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((s, v) -> s.massiveClouds = v, s -> s.massiveClouds)
+                        .setImpact(OptionImpact.MEDIUM)
+                        .build()
+                ).add(OptionImpl.createBuilder(boolean.class, storage)
                         .setName(Component.translatable("voxy.config.general.render_statistics"))
                         .setTooltip(Component.translatable("voxy.config.general.render_statistics.tooltip"))
                         .setControl(TickBoxControl::new)
@@ -151,7 +158,43 @@ public abstract class VoxyConfigScreenPages {
                         .build()
                 ).build()
         );
+        groups.addAll(cloudGroups());
+        // The fog addon is optional. Build its controls into this page directly so
+        // constructor-mixin ordering cannot create duplicate tabs or stale page identities.
+        try {
+            var fogGroups = (List<?>) Class.forName("dev.not_tim.voxyfog.SodiumFogOptions")
+                    .getMethod("groups").invoke(null);
+            for (Object group : fogGroups) {
+                groups.add(OptionGroup.class.cast(group));
+            }
+        } catch (ClassNotFoundException ignored) {
+            // VoxyFog is not installed.
+        } catch (ReflectiveOperationException | ClassCastException e) {
+            me.cortex.voxy.common.Logger.error("Failed to add VoxyFog controls to Voxy options", e);
+        }
         return new OptionPage(Component.translatable("voxy.config.title"), ImmutableList.copyOf(groups));
+    }
+
+    /** Cloud controls share the main Voxy page. Sliders save immediately. */
+    private static List<OptionGroup> cloudGroups() {
+        VoxyConfig s = VoxyConfig.CONFIG;
+        return ImmutableList.of(
+                OptionGroup.createBuilder()
+                        .add(new LiveCloudSlider("height", -64, 4096, 16, false,
+                                () -> s.cloudHeight, v -> s.cloudHeight = v, s))
+                        .add(new LiveCloudSlider("cell_size", 48, 384, 12, false,
+                                () -> s.cloudCellSize, v -> s.cloudCellSize = v, s))
+                        .add(new LiveCloudSlider("thickness", 4, 256, 4, false,
+                                () -> s.cloudThickness, v -> s.cloudThickness = v, s))
+                        .add(new LiveCloudSlider("speed", 0, 1000, 10, true,
+                                () -> s.cloudSpeed, v -> s.cloudSpeed = v, s))
+                        .build(),
+                OptionGroup.createBuilder()
+                        .add(new LiveCloudSlider("fade_start", 0, 98, 1, true,
+                                () -> s.cloudFadeStart, s::setCloudFadeStart, s))
+                        .add(new LiveCloudSlider("fade_end", 1, 99, 1, true,
+                                () -> s.cloudFadeEnd, s::setCloudFadeEnd, s))
+                        .build());
     }
 
     private static final int SUBDIV_IN_MAX = 100;

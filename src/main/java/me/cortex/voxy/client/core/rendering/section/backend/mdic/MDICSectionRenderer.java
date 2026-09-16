@@ -160,6 +160,9 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         this.modelStore.bind(3, 4, 0);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, viewport.positionScratchBuffer.id);
         LightMapHelper.bind(1);
+        if (this.pipeline instanceof me.cortex.voxy.client.core.NormalRenderPipeline normal) {
+            normal.bindLightmap(viewport);
+        }
         glBindTextureUnit(2, viewport.depthBoundingBuffer.getDepthTex().id);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SharedIndexBuffer.INSTANCE.id());

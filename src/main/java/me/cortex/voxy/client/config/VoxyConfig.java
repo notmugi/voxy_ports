@@ -27,10 +27,17 @@ public class VoxyConfig implements OptionStorage<VoxyConfig> {
     public boolean enabled = true;
     public boolean enableRendering = true;
     public boolean ingestEnabled = true;
-    public int sectionRenderDistance = 16;
-    public int serviceThreads = (int) Math.max(CpuLayout.getCoreCount()/1.5, 1);
-    public float subDivisionSize = 64;
+    public int sectionRenderDistance = 4; // 128 chunks
+    public int serviceThreads = 10;
+    public float subDivisionSize = 63.497753f;
     public boolean renderVanillaFog = false;
+    public boolean massiveClouds = true;
+    public int cloudHeight = 320;
+    public int cloudCellSize = 48;
+    public int cloudThickness = 40;
+    public int cloudSpeed = 500; // Percent of the original 0.03 blocks/tick.
+    public int cloudFadeStart = 36;
+    public int cloudFadeEnd = 99;
     public boolean renderStatistics = false;
     public boolean dontUseSodiumBuilderThreads = false;
 
@@ -62,7 +69,29 @@ public class VoxyConfig implements OptionStorage<VoxyConfig> {
         }
     }
 
+    /** Also validates hand-edited files. A >=1% fade band avoids undefined smoothstep. */
+    public void sanitizeCloudSettings() {
+        cloudHeight = Math.clamp(cloudHeight, -64, 4096);
+        // At max RD and 99% fade end, 48-block cells cross <960 cells per ray.
+        cloudCellSize = Math.clamp(cloudCellSize, 48, 384);
+        cloudThickness = Math.clamp(cloudThickness, 4, 256);
+        cloudSpeed = Math.clamp(cloudSpeed, 0, 1000);
+        cloudFadeEnd = Math.clamp(cloudFadeEnd, 1, 99);
+        cloudFadeStart = Math.clamp(cloudFadeStart, 0, cloudFadeEnd - 1);
+    }
+
+    public void setCloudFadeStart(int value) {
+        cloudFadeStart = Math.clamp(value, 0, 98);
+        cloudFadeEnd = Math.max(cloudFadeEnd, cloudFadeStart + 1);
+    }
+
+    public void setCloudFadeEnd(int value) {
+        cloudFadeEnd = Math.clamp(value, 1, 99);
+        cloudFadeStart = Math.min(cloudFadeStart, cloudFadeEnd - 1);
+    }
+
     public void save() {
+        sanitizeCloudSettings();
         if (!VoxyCommon.isAvailable()) {
             Logger.info("Not saving config since voxy is unavalible");
             return;

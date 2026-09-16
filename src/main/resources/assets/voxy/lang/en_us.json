@@ -1,36 +1,39 @@
 {
   "voxy.config.title": "Voxy",
-
   "voxy.config.general": "General",
   "voxy.config.rendering": "Rendering",
-
   "voxy.config.general.enabled": "Enable Voxy",
   "voxy.config.general.enabled.tooltip": "Fully enables or disables voxy",
-
   "voxy.config.general.serviceThreads": "Service threads",
   "voxy.config.general.serviceThreads.tooltip": "Number of threads the ServiceThreadPool can use",
-
   "voxy.config.general.useSodiumBuilder": "Use sodium threads",
   "voxy.config.general.useSodiumBuilder.tooltip": "Uses sodium builder threads as part of voxys thread pool, can reduce stuttering and lag when moving quickly at high render distance",
-
   "voxy.config.general.ingest": "Chunk Ingest",
   "voxy.config.general.ingest.tooltip": "Enables or disables voxies ability to convert new chunks into LoDs",
-
   "voxy.config.general.rendering": "Voxy Rendering",
   "voxy.config.general.rendering.tooltip": "Enables or disables voxy rendering",
-
   "voxy.config.general.subDivisionSize": "Pixels^2 of subdivision size",
   "voxy.config.general.subDivisionSize.tooltip": "Maximum size in pixels (squared) of screenspace AABB before subdiving to smaller LoDs (Smaller being higher quality)",
-
   "voxy.config.general.renderDistance": "Render distance",
-  "voxy.config.general.renderDistance.tooltip": "Render distance of voxy in chunks",
-
+  "voxy.config.general.renderDistance.tooltip": "Square XZ coverage distance of Voxy in chunks. Includes corner sections; these can increase rendering cost compared with circular coverage.",
   "voxy.config.general.environmental_fog": "Enable environmental fog",
   "voxy.config.general.environmental_fog.tooltip": "Enables or disables voxy rendering environmental fog",
-
   "voxy.config.general.render_fog": "Enable render fog",
   "voxy.config.general.render_fog.tooltip": "Enables or disables render fog effect",
-
+  "voxy.config.general.massive_clouds": "Massive distant clouds",
+  "voxy.config.general.massive_clouds.tooltip": "Independent vanilla-textured clouds. Adjust height, width, thickness, speed and fade live below in this Voxy tab. Overrides vanilla/Sodium/Sodium Extra cloud settings, even Clouds: Off. Apply to save this toggle; disabling restores their cloud rendering. Shaderpacks keep their own clouds.",
   "voxy.config.general.render_statistics": "Enable render statistics",
-  "voxy.config.general.render_statistics.tooltip": "Enable render statistics in F3 menu, useful for debugging"
+  "voxy.config.general.render_statistics.tooltip": "Enable render statistics in F3 menu, useful for debugging",
+  "voxy.config.clouds.height": "Cloud height (Y)",
+  "voxy.config.clouds.height.tooltip": "Bottom of the cloud layer in world blocks. Range -64 to 4096, step 16; default 320. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds.",
+  "voxy.config.clouds.cell_size": "Cloud cell width",
+  "voxy.config.clouds.cell_size.tooltip": "Width of each cloud texture cell in blocks. Range 48 to 384, step 12; default 40 (4x vanilla). Smaller cells can cost more GPU time. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds.",
+  "voxy.config.clouds.thickness": "Cloud thickness",
+  "voxy.config.clouds.thickness.tooltip": "Cloud layer thickness in blocks. Range 4 to 256, step 4; default 40. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds.",
+  "voxy.config.clouds.speed": "Cloud speed",
+  "voxy.config.clouds.speed.tooltip": "Cloud drift relative to the original speed. Range 0% (stopped) to 1000% (10x), step 10%; default 500% (3 blocks/second at 20 TPS). Changes speed without jumping the clouds. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds.",
+  "voxy.config.clouds.fade_start": "Cloud fade start",
+  "voxy.config.clouds.fade_start.tooltip": "Distance where clouds start fading, as a percentage of Voxy render distance (not vanilla distance). Range 0% to 98%; default 36%. Moves fade end up if needed. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds.",
+  "voxy.config.clouds.fade_end": "Cloud fade end",
+  "voxy.config.clouds.fade_end.tooltip": "Distance where clouds disappear, as a percentage of Voxy render distance. Range 1% to 99%; default 99%. Moves fade start down if needed. Always fades before the render-distance edge. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds."
 }

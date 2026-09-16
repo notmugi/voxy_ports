@@ -21,6 +21,7 @@
     "minecraft.MixinClientLevel",
     "minecraft.MixinClientPacketListener",
     "minecraft.MixinFogRenderer",
+    "minecraft.MixinDistantClouds",
     "minecraft.MixinLevelRenderer",
     "minecraft.MixinMinecraft",
     "minecraft.MixinRenderSystem",

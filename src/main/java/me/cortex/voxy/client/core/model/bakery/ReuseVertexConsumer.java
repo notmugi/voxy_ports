@@ -14,6 +14,7 @@ public final class ReuseVertexConsumer implements VertexConsumer {
     private long ptr;
     private int count;
     private int defaultMeta;
+    public boolean anyShaded;
 
     public ReuseVertexConsumer() {
         this.reset();
@@ -68,6 +69,8 @@ public final class ReuseVertexConsumer implements VertexConsumer {
     }
 
     public ReuseVertexConsumer quad(BakedQuad quad, int metadata) {
+        // Modern Voxy carries the quad's shade flag through the bake result.
+        this.anyShaded |= quad.isShade();
         this.ensureCanPut();
         int[] data = quad.getVertices();
         for (int i = 0; i < 4; i++) {
@@ -98,6 +101,7 @@ public final class ReuseVertexConsumer implements VertexConsumer {
     }
 
     public ReuseVertexConsumer reset() {
+        this.anyShaded = false;
         this.defaultMeta = 0;//RESET THE DEFAULT META
         this.count = 0;
         this.ptr = this.buffer.address - VERTEX_FORMAT_SIZE;//the thing is first time this gets incremented by FORMAT_STRIDE

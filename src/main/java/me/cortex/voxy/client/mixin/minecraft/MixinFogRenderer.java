@@ -30,11 +30,15 @@ public class MixinFogRenderer {
             float tickDelta,
             CallbackInfo ci
     ) {
+        if (fogMode != FogMode.FOG_TERRAIN || thickFog
+                || camera.getFluidInCamera() != net.minecraft.world.level.material.FogType.NONE
+                || (camera.getEntity() instanceof net.minecraft.world.entity.LivingEntity living
+                    && (living.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS)
+                        || living.hasEffect(net.minecraft.world.effect.MobEffects.DARKNESS)))) return;
         var vrs = (IGetVoxyRenderSystem) Minecraft.getInstance().levelRenderer;
-
-        if (VoxyConfig.CONFIG.renderVanillaFog || vrs == null || vrs.getVoxyRenderSystem() == null) {
-            RenderSystem.setShaderFogEnd(viewDistance);
-        } else {
+        // Enabling vanilla fog must preserve setupFog's actual values (water/status/dimension
+        // fog included), not overwrite its end unconditionally with the render distance.
+        if (!VoxyConfig.CONFIG.renderVanillaFog && vrs != null && vrs.getVoxyRenderSystem() != null) {
             RenderSystem.setShaderFogStart(999999999);
             RenderSystem.setShaderFogEnd(999999999);
         }

@@ -3,6 +3,7 @@ package me.cortex.voxy.client.core.rendering.building;
 import me.cortex.voxy.client.core.model.IdNotYetComputedException;
 import me.cortex.voxy.client.core.model.ModelFactory;
 import me.cortex.voxy.client.core.model.ModelQueries;
+import me.cortex.voxy.client.core.model.StairGeometry;
 import me.cortex.voxy.client.core.util.ScanMesher2D;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.MemoryBuffer;
@@ -20,7 +21,6 @@ public class RenderDataFactory {
     private static final boolean BUILD_OCCUPANCY_SET = false;
 
     private static final boolean CHECK_NEIGHBOR_FACE_OCCLUSION = true;
-    private static final boolean DISABLE_CULL_SAME_OCCLUDES = false;//TODO: FIX TRANSLUCENTS (e.g. stained glass) breaking on chunk boarders with this set to false (it might be something else????)
 
     private static final boolean VERIFY_MESHING = VoxyCommon.isVerificationFlagOn("verifyMeshing");
 
@@ -108,7 +108,6 @@ public class RenderDataFactory {
                 }
             }
 
-            RenderDataFactory.this.quadCount++;
 
             x -= length-1;
             z -= width-1;
@@ -162,8 +161,12 @@ public class RenderDataFactory {
 
 
             int bufferIdx = type+(type==2?face:0);//Translucent, double side, directional
-            long bufferOffset = (RenderDataFactory.this.quadCounters[bufferIdx]++)*8L + bufferIdx*8L*(1<<16);
-            MemoryUtil.memPutLong(RenderDataFactory.this.quadBufferPtr + bufferOffset, quad);
+            int stairShape = RenderDataFactory.this.modelMan.getStairShape((int)((quad >>> 26) & 0xFFFF));
+            if (stairShape != 0) {
+                StairGeometry.expandQuad(quad, stairShape, q -> RenderDataFactory.this.storeQuad(bufferIdx, q));
+            } else {
+                RenderDataFactory.this.storeQuad(bufferIdx, quad);
+            }
 
 
             //Update AABB bounds
@@ -196,6 +199,14 @@ public class RenderDataFactory {
                 RenderDataFactory.this.maxZ = Math.max(RenderDataFactory.this.maxZ, z + width);
             }
         }
+    }
+
+    private void storeQuad(int buffer, long quad) {
+        int index = this.quadCounters[buffer];
+        if (index >= (1 << 16)) throw new IllegalStateException("Section directional quad capacity exceeded");
+        this.quadCounters[buffer]++;
+        this.quadCount++;
+        MemoryUtil.memPutLong(this.quadBufferPtr + (buffer * (1L << 16) + index) * 8, quad);
     }
 
     private final Mesher blockMesher = new Mesher();
@@ -368,7 +379,7 @@ public class RenderDataFactory {
     private static final long LM = (0xFFL<<55);
 
     private static boolean shouldMeshNonOpaqueBlockFace(int face, long quad, long meta, long neighborQuad, long neighborMeta) {
-        if (((quad^neighborQuad)&(0xFFFFL<<26))==0 && (DISABLE_CULL_SAME_OCCLUDES || (ModelQueries.cullsSame(meta)||ModelQueries.faceOccludes(meta, face)))) return false;//This is a hack, if the neigbor and this are the same, dont mesh the face// TODO: FIXME
+        if (((quad^neighborQuad)&(0xFFFFL<<26))==0 && ModelQueries.cullsSame(meta)) return false;//Only explicit self-culling; our own face coverage says nothing about the opposite face.
         if (!ModelQueries.faceExists(meta, face)) return false;//Dont mesh if no face
         if (ModelQueries.faceCanBeOccluded(meta, face)) //TODO: maybe enable this
           if (ModelQueries.faceOccludes(neighborMeta, face^1)) return false;
@@ -856,6 +867,11 @@ public class RenderDataFactory {
                             }
                         }
 
+
+                        // Outer Y/Z used to cull inset surfaces solely from the
+                        // neighbour's coverage, unlike the inner and X paths.
+                        fail &= ModelQueries.faceCanBeOccluded(B, (axis << 1) | side);
+                        failB &= ModelQueries.faceCanBeOccluded(B, (axis << 1) | (1 - side));
 
                         //TODO: LIGHTING
                         if (ModelQueries.faceExists(B, (axis<<1)|1) && ((side==1&&!fail) || (side==0&&!failB))) {

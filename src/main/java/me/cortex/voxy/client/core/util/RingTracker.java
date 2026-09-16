@@ -3,9 +3,10 @@ package me.cortex.voxy.client.core.util;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import me.cortex.voxy.common.Logger;
 
+import java.util.Arrays;
 import java.util.Random;
 
-//Tracks a ring and load/unload positions
+//Tracks a square XZ footprint and load/unload positions
 // can process N of these load/unload positions
 public class RingTracker {
     //TODO: replace with custom map that removes elements if its mapped to 0
@@ -23,7 +24,9 @@ public class RingTracker {
         this.centerX = centerX;
         this.centerZ = centerZ;
         this.radius = radius;
-        this.boundDist = generateBoundingHalfCircleDistance(radius);
+        // Constant column extent keeps all corners, even at radius 2 (64 UI chunks).
+        this.boundDist = new int[radius * 2 + 1];
+        Arrays.fill(this.boundDist, radius);
         if (stealFrom != null) {
             this.operations.putAll(stealFrom.operations);
             stealFrom.operations.clear();
@@ -180,14 +183,6 @@ public class RingTracker {
             iter.remove();
         }
         return i;
-    }
-
-    private int[] generateBoundingHalfCircleDistance(int radius) {
-        var ret = new int[radius*2+1];
-        for (int i = -radius; i <= radius; i++) {
-            ret[i+radius] = (int)Math.sqrt(radius*radius - i*i);
-        }
-        return ret;
     }
 
     public static void main(String[] args) {

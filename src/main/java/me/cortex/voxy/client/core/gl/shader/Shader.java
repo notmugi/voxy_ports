@@ -81,6 +81,7 @@ public class Shader extends TrackedObject {
         public Builder<T> clone() {
             var clone = new Builder<>(this.constructor, this.processor);
             clone.defines.putAll(this.defines);
+            clone.replacements.putAll(this.replacements);
             clone.sources.putAll(this.sources);
             return clone;
         }
@@ -121,7 +122,7 @@ public class Shader extends TrackedObject {
         }
 
         public Builder<T> replace(String value, String replacement) {
-            this.defines.put(value, replacement);
+            this.replacements.put(value, replacement);
             return this;
         }
 

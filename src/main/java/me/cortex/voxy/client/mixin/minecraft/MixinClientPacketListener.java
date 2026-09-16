@@ -12,6 +12,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ClientPacketListener.class)
 public class MixinClientPacketListener {
+    @Inject(method = "handleSetTime", at = @At("TAIL"))
+    private void voxy$timeSynchronized(net.minecraft.network.protocol.game.ClientboundSetTimePacket packet, CallbackInfo ci) {
+        me.cortex.voxy.client.core.rendering.util.NostalgicLightmap.onServerTime();
+    }
+
     @Inject(method = "handleLogin", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/protocol/game/ClientboundLoginPacket;commonPlayerSpawnInfo()Lnet/minecraft/network/protocol/game/CommonPlayerSpawnInfo;"))
     private void voxy$init(ClientboundLoginPacket packet, CallbackInfo ci) {
         if (VoxyCommon.isAvailable() && !VoxyClientInstance.isInGame) {

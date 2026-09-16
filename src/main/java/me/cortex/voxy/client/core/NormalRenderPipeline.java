@@ -1,24 +1,19 @@
 package me.cortex.voxy.client.core;
 
-import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.gl.GlFramebuffer;
 import me.cortex.voxy.client.core.gl.GlTexture;
-import me.cortex.voxy.client.core.gl.shader.Shader;
-import me.cortex.voxy.client.core.gl.shader.ShaderType;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTraverser;
 import me.cortex.voxy.client.core.rendering.hierachical.NodeCleaner;
 import me.cortex.voxy.client.core.rendering.post.FullscreenBlit;
 import me.cortex.voxy.client.core.rendering.util.DepthFramebuffer;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
-import org.lwjgl.system.MemoryStack;
 
 import java.util.function.BooleanSupplier;
 
-import static org.lwjgl.opengl.ARBComputeShader.glDispatchCompute;
-import static org.lwjgl.opengl.ARBShaderImageLoadStore.glBindImageTexture;
 import static org.lwjgl.opengl.GL11.GL_BLEND;
 import static org.lwjgl.opengl.GL11.GL_ONE;
 import static org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA;
@@ -27,7 +22,6 @@ import static org.lwjgl.opengl.GL11.glEnable;
 import static org.lwjgl.opengl.GL11C.GL_NEAREST;
 import static org.lwjgl.opengl.GL11C.GL_RGBA8;
 import static org.lwjgl.opengl.GL14.glBlendFuncSeparate;
-import static org.lwjgl.opengl.GL15.GL_READ_WRITE;
 import static org.lwjgl.opengl.GL30C.*;
 import static org.lwjgl.opengl.GL33.glBindSampler;
 import static org.lwjgl.opengl.GL43.GL_DEPTH_STENCIL_TEXTURE_MODE;
@@ -36,20 +30,28 @@ import static org.lwjgl.opengl.GL45C.glTextureParameterf;
 
 public class NormalRenderPipeline extends AbstractRenderPipeline {
     private GlTexture colourTex;
+    private int sourceDepthTexture;
     private GlTexture colourSSAOTex;
     private final GlFramebuffer fbSSAO = new GlFramebuffer();
     private final DepthFramebuffer fb = new DepthFramebuffer(GL_DEPTH24_STENCIL8);
 
     private final FullscreenBlit finalBlit;
+    private final me.cortex.voxy.client.core.rendering.DistantClouds distantClouds =
+            new me.cortex.voxy.client.core.rendering.DistantClouds();
+    private final me.cortex.voxy.client.core.rendering.util.NostalgicLightmap nostalgicLightmap =
+            new me.cortex.voxy.client.core.rendering.util.NostalgicLightmap();
 
-    private final Shader ssaoCompute = Shader.make()
-            .add(ShaderType.COMPUTE, "voxy:post/ssao.comp")
-            .compile();
+    public void bindLightmap(Viewport<?> viewport) {
+        glBindSampler(1, 0);
+        glBindTextureUnit(1, this.nostalgicLightmap.getTexture(viewport.frameId));
+    }
+
+    private final SSAO ssao = SSAO.createSSAO(SSAO.SSAOMode.AUTO);
 
     protected NormalRenderPipeline(AsyncNodeManager nodeManager, NodeCleaner nodeCleaner, HierarchicalOcclusionTraverser traversal, BooleanSupplier frexSupplier) {
         super(nodeManager, nodeCleaner, traversal, frexSupplier);
         this.finalBlit = new FullscreenBlit("voxy:post/blit_texture_depth_cutout.frag",
-                a->a.define("EMIT_COLOUR"));
+                a->a.define("EMIT_COLOUR").define("USE_ENV_FOG"));
     }
 
     @Override
@@ -75,6 +77,8 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
             glTextureParameterf(this.fb.getDepthTex().id, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
         }
 
+        this.sourceDepthTexture = org.lwjgl.opengl.GL45C.glGetNamedFramebufferAttachmentParameteri(
+                sourceFB, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
         this.initDepthStencil(sourceFB, this.fb.framebuffer.id, viewport.width, viewport.height, viewport.width, viewport.height);
 
         return this.fb.getDepthTex().id;
@@ -82,25 +86,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
 
     @Override
     protected void postOpaquePreTranslucent(Viewport<?> viewport) {
-        this.ssaoCompute.bind();
-        try (var stack = MemoryStack.stackPush()) {
-            long ptr = stack.nmalloc(4*4*4);
-            viewport.MVP.getToAddress(ptr);
-            nglUniformMatrix4fv(3, 1, false, ptr);//MVP
-            viewport.MVP.invert(new Matrix4f()).getToAddress(ptr);
-            nglUniformMatrix4fv(4, 1, false, ptr);//invMVP
-        }
-        glUniform2i(5, viewport.width, viewport.height);
-
-
-        glBindImageTexture(0, this.colourSSAOTex.id, 0, false,0, GL_READ_WRITE, GL_RGBA8);
-        glBindTextureUnit(1, this.fb.getDepthTex().id);
-        glBindSampler(1,0);
-        glBindTextureUnit(2, this.colourTex.id);
-        glBindSampler(2,0);
-
-        glDispatchCompute((viewport.width+31)/32, (viewport.height+31)/32, 1);
-
+        this.ssao.computeSSAO(viewport, this.colourSSAOTex, this.colourTex, this.fb.getDepthTex(), this.sourceDepthTexture);
         glBindFramebuffer(GL_FRAMEBUFFER, this.fbSSAO.id);
     }
 
@@ -108,6 +94,33 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     protected void finish(Viewport<?> viewport, int sourceFrameBuffer, int srcWidth, int srcHeight) {
         this.finalBlit.bind();
 
+        float fogStart = RenderSystem.getShaderFogStart();
+        float fogEnd = RenderSystem.getShaderFogEnd();
+        float[] fogColour = RenderSystem.getShaderFogColor();
+        var range = me.cortex.voxy.client.core.rendering.DistanceFog.getRange();
+        float shape = RenderSystem.getShaderFogShape() == com.mojang.blaze3d.shaders.FogShape.CYLINDER ? 1f : 0f;
+        var mc = Minecraft.getInstance();
+        var camera = mc.gameRenderer.getMainCamera();
+        boolean environmental = camera.getFluidInCamera() != net.minecraft.world.level.material.FogType.NONE
+                || (camera.getEntity() instanceof net.minecraft.world.entity.LivingEntity living
+                    && (living.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS)
+                        || living.hasEffect(net.minecraft.world.effect.MobEffects.DARKNESS)))
+                || (mc.level != null && mc.level.effects().isFoggyAt(
+                    net.minecraft.util.Mth.floor(camera.getPosition().x), net.minecraft.util.Mth.floor(camera.getPosition().z)));
+        if (range != null && !environmental) {
+            fogStart = range[0];
+            fogEnd = range[1];
+            shape = 2f; // RenderDistanceTracker tracks an XZ circle, not a sphere.
+        }
+        if (Float.isFinite(fogEnd) && fogEnd - fogStart > 1f && fogEnd < 1.0e8f) {
+            float invDelta = 1f / (fogEnd - fogStart);
+            glUniform4f(4, invDelta, -fogStart * invDelta, 1f, shape);
+            glUniform4f(5, fogColour[0], fogColour[1], fogColour[2], 1f);
+        } else {
+            glUniform4f(4, 0, 0, 0, 0);
+            glUniform4f(5, 0, 0, 0, 0);
+        }
+        glBindSampler(3, 0);
         glBindTextureUnit(3, this.colourSSAOTex.id);
 
         //Do alpha blending
@@ -116,6 +129,9 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
         glDisable(GL_BLEND);
+        // Composite independently of vanilla's Clouds option/call site, before its translucent terrain.
+        // Ray hits are clipped against Voxy depth; hardware depth also tests the vanilla foreground.
+        this.distantClouds.render(viewport, this.fb.getDepthTex().id);
         //glBlitNamedFramebuffer(this.fbSSAO.id, sourceFrameBuffer, 0,0, viewport.width, viewport.height, 0,0, viewport.width, viewport.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
 
@@ -132,7 +148,9 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     @Override
     public void free() {
         this.finalBlit.delete();
-        this.ssaoCompute.free();
+        this.distantClouds.free();
+        this.ssao.free();
+        this.nostalgicLightmap.free();
         this.fb.free();
         this.fbSSAO.free();
         if (this.colourTex != null) {
