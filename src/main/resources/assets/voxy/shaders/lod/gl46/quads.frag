@@ -156,12 +156,19 @@ void main() {
         return;
     }
 
-    #if !defined(PATCHED_SHADER) && !defined(TRANSLUCENT)
+    #ifndef TRANSLUCENT
     // Vanilla cutout holes have no depth and cannot mask a solid LOD copy
     // of the same tree. Exclude foliage inside built Sodium section bounds.
     // Do NOT apply this to ground or fluids: coarse bounds can hide their
-    // boundary gap-fill geometry. Preserve the shaderpack path as well.
-    if ((interData.x & 128u) != 0u) {
+    // boundary gap-fill geometry. Iris binds the same viewport-sized bounds,
+    // rasterized with the same projection and shaderpack TAA as LOD terrain.
+    #ifdef PATCHED_SHADER
+    // Iris already reads models here; retain its existing packed flag ABI.
+    bool isLeaf = (modelData[getModelId()].flagsA & 256u) != 0u;
+    #else
+    bool isLeaf = (interData.x & 128u) != 0u;
+    #endif
+    if (isLeaf) {
         float sectionExitDepth = texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r;
         // A leaf top can coincide with the section's exit face when viewed
         // from below. Include that boundary, undo outline.vsh's clip-z bias,
