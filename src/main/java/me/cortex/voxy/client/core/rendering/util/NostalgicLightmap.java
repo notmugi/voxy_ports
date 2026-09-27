@@ -92,7 +92,7 @@ public final class NostalgicLightmap {
                 for (int sky = 0; sky < 16; sky++) {
                     for (int block = 0; block < 16; block++) {
                         int mapped = mapping[sky * 16 + block];
-                        data.put(pixels.getPixelRGBA(block, Math.clamp(mapped, 0, 15)));
+                        data.put(LightmapSampling.sample(pixels::getPixelRGBA, block, mapped));
                     }
                 }
                 data.flip();
@@ -116,6 +116,11 @@ public final class NostalgicLightmap {
             Logger.error("NT round-robin lightmap compatibility failed", e);
         }
         return this.currentTexture;
+    }
+
+    /** True when using the NT lookup. */
+    public boolean isPrefiltered() {
+        return this.texture != null && this.currentTexture == this.texture.id;
     }
 
     public void free() {

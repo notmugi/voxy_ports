@@ -35,5 +35,11 @@
   "voxy.config.clouds.fade_start": "Cloud fade start",
   "voxy.config.clouds.fade_start.tooltip": "Distance where clouds start fading, as a percentage of Voxy render distance (not vanilla distance). Range 0% to 98%; default 36%. Moves fade end up if needed. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds.",
   "voxy.config.clouds.fade_end": "Cloud fade end",
-  "voxy.config.clouds.fade_end.tooltip": "Distance where clouds disappear, as a percentage of Voxy render distance. Range 1% to 99%; default 99%. Moves fade start down if needed. Always fades before the render-distance edge. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds."
+  "voxy.config.clouds.fade_end.tooltip": "Distance where clouds disappear, as a percentage of Voxy render distance. Range 1% to 99%; default 99%. Moves fade start down if needed. Always fades before the render-distance edge. Applies and saves immediately; Undo does not revert it. Requires Massive distant clouds enabled in Voxy; shaderpacks keep their own clouds.",
+  "voxy_renderdistance_fog.option.enabled": "Voxy Distance Fog",
+  "voxy_renderdistance_fog.option.enabled.tooltip": "Toggles the extra fog fade added for Voxy's render distance.",
+  "voxy_renderdistance_fog.option.fog_min": "Fog Min",
+  "voxy_renderdistance_fog.option.fog_max": "Fog Max",
+  "voxy_renderdistance_fog.option.fog_min.tooltip": "Where fog starts, as a fraction of Voxy render distance (0–1). Applies and saves immediately. Moving above Max also raises Max.",
+  "voxy_renderdistance_fog.option.fog_max.tooltip": "Where fog becomes fully opaque, as a fraction of Voxy render distance (0–1). Applies and saves immediately. Moving below Min also lowers Min."
 }

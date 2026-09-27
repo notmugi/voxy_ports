@@ -96,9 +96,18 @@ layout(binding = POSITION_SCRATCH_BINDING, std430) POSITION_SCRATCH_ACCESS restr
 
 layout(binding = LIGHTING_SAMPLER_BINDING) uniform sampler2D lightSampler;
 
+// NT uses a filtered lookup. Native uses Sodium texture coordinates.
+#ifndef PATCHED_SHADER
+layout(location = 7) uniform bool prefilteredLightmap;
+#endif
 vec4 getLighting(uint index) {
-    int i2 = int(index);
-    return textureLod(lightSampler, (vec2((i2>>4)&0xF, i2&0xF) + 0.5) / 16.0, 0.0);
+    vec2 levels = vec2((index >> 4) & 15u, index & 15u);
+#ifndef PATCHED_SHADER
+    if (prefilteredLightmap) {
+        return texelFetch(lightSampler, ivec2(levels), 0);
+    }
+#endif
+    return textureLod(lightSampler, clamp(levels / 16.0, vec2(0.5 / 16.0), vec2(15.5 / 16.0)), 0.0);
 }
 #endif
 

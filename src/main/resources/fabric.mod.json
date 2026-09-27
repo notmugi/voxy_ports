@@ -11,8 +11,7 @@
   "authors": [
     "Cortex"
   ],
-  "contact": {
-  },
+  "contact": {},
   "license": "All-Rights-Reserved",
   "icon": "assets/voxy/icon.png",
   "environment": "*",
@@ -25,6 +24,9 @@
     ],
     "main": [
       "me.cortex.voxy.commonImpl.VoxyCommon"
+    ],
+    "sodium:config_api_user": [
+      "me.cortex.voxy.client.config.VoxyConfigMenu"
     ]
   },
   "mixins": [
@@ -35,10 +37,18 @@
     "common.voxy.mixins.json"
   ],
   "depends": {
-    "minecraft": ["1.21.1"],
+    "minecraft": [
+      "1.21.1"
+    ],
     "fabricloader": ">=0.14.22",
     "fabric-api": ">=0.91.1",
-    "sodium": ">=0.6.13"
+    "sodium": ">=0.8.13 <0.9",
+    "java": ">=21"
   },
-  "accessWidener": "voxy.accesswidener"
+  "accessWidener": "voxy.accesswidener",
+  "breaks": {
+    "iris": "<1.8.14-beta.1",
+    "sodium-extra": "<0.9.4",
+    "nvidium": "*"
+  }
 }

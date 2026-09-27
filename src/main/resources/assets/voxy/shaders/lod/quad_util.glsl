@@ -64,8 +64,12 @@ uint makeQuadFlags(uint faceData, uint modelId, ivec2 quadSize, const in BlockMo
     flags |= faceTintState(faceData)<<2;
     flags |= face<<4;//Face
     #ifndef PATCHED_SHADER
-    // Free bit 7: foliage overlap exclusion. Leave Iris's flags unchanged.
-    flags |= ((model.flagsA >> 8u) & 1u) << 7u;
+    // Bit 7 marks loaded terrain overlap.
+    #ifdef TRANSLUCENT
+    flags |= uint((model.flagsA & 512u) != 0u) << 7u; // fluids
+    #else
+    flags |= uint((model.flagsA & 768u) != 0u) << 7u; // leaves and opaque fluids
+    #endif
     #endif
 
     return flags;
@@ -103,9 +107,7 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
     bool isShaded = modelIsShaded(model);
     bool hasAO = isShaded;
 
-    // Vanilla light samples for emitters must not fall below their own emission.
-    // Fluids use adjacent mesh light, which can be zero in cached/coarse LODs.
-    // Keep the shaderpack path's raw light contract unchanged.
+    // Keep emitter light, Iris wants the raw value.
     uint emission = (model.flagsA >> 4u) & 15u;
     lighting = (lighting & 15u) | (max(lighting >> 4u, emission) << 4u);
     vec4 tinting = getLighting(lighting);
@@ -154,8 +156,7 @@ void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool genera
 
     vec4 faceSize = getFaceSize(faceData);
     float depthOffset = extractFaceIndentation(faceData);
-    // Bits 42..45 were unused in the packed quad. Stair patches carry
-    // two half-face coordinates and their exact boundary/inset depth.
+    // Stair patches reuse bits 42..45.
     uint geometryPatch = extractGeometryPatch(rawQuad);
     if ((geometryPatch & 8u) != 0u) {
         faceSize = vec4(float(geometryPatch & 1u) * .5, .5, float((geometryPatch >> 1u) & 1u) * .5, .5);
@@ -176,8 +177,7 @@ void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool genera
     quad.quadSizeAddin = faceSize.yw + quadSize - 1;
     #endif
     if ((geometryPatch & 8u) != 0u) {
-        // Stair size fields count half-blocks, not whole blocks. Texture UVs
-        // still repeat once per block, including across greedily merged treads.
+        // Stair patches use half blocks.
         quad.quadSizeAddin = vec2(quadSize) * .5;
         #ifdef USE_SINGLE_TRI
         quad.quadSizeAddin *= 2;

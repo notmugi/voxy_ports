@@ -361,14 +361,14 @@ public class ModelFactory {
         }
         this.blockStatesInFlightLock.unlock();
 
-        // Preserve block emission even when a fluid face borrows an unlit neighbour's
-        // light (or a coarse LOD sample has lost the emitter's original light value).
+        // Fluids can borrow bad light, so keep block emission.
         int lightingFlags = (blockState.getLightEmission() << 4) | (isShaded ? 8 : 0);
-        // Include leaf identity in both GPU flags and deduplication: only foliage
-        // needs loaded-terrain overlap rejection in the normal render path.
+        // Keep overlap flags in the dedup key.
         lightingFlags |= blockState.getBlock() instanceof LeavesBlock ? 1 << 8 : 0;
 
         boolean isFluid = blockState.getBlock() instanceof LiquidBlock;
+        // Only tag the fluid model, not waterlogged hosts.
+        lightingFlags |= isFluid ? 1 << 9 : 0;
         int modelId = -1;
 
 
@@ -629,7 +629,7 @@ public class ModelFactory {
 
 
         //TODO: THIS
-        modelFlags |= lightingFlags;//shade bit 3, emitted block light bits 4..7
+        modelFlags |= lightingFlags;//shade 3, emission 4..7, leaf 8, fluid 9
 
         //modelFlags |= blockRenderLayer == RenderLayer.getSolid()?0:1;// should discard alpha
         MemoryUtil.memPutInt(uploadPtr, modelFlags); uploadPtr += 4;

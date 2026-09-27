@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.sugar.Local;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.IGetVoxyRenderSystem;
+import me.cortex.voxy.client.fog.VoxyFogTuning;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.FogRenderer;
@@ -36,9 +37,20 @@ public class MixinFogRenderer {
                     && (living.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS)
                         || living.hasEffect(net.minecraft.world.effect.MobEffects.DARKNESS)))) return;
         var vrs = (IGetVoxyRenderSystem) Minecraft.getInstance().levelRenderer;
+        boolean voxyActive = vrs != null && vrs.getVoxyRenderSystem() != null;
+        // Use the same fog range for terrain and LODs.
+        if (voxyActive) {
+            var range = VoxyFogTuning.getActiveRange();
+            if (range != null) {
+                RenderSystem.setShaderFogStart(range.start());
+                RenderSystem.setShaderFogEnd(range.end());
+                RenderSystem.setShaderFogShape(com.mojang.blaze3d.shaders.FogShape.CYLINDER);
+                return;
+            }
+        }
         // Enabling vanilla fog must preserve setupFog's actual values (water/status/dimension
         // fog included), not overwrite its end unconditionally with the render distance.
-        if (!VoxyConfig.CONFIG.renderVanillaFog && vrs != null && vrs.getVoxyRenderSystem() != null) {
+        if (!VoxyConfig.CONFIG.renderVanillaFog && voxyActive) {
             RenderSystem.setShaderFogStart(999999999);
             RenderSystem.setShaderFogEnd(999999999);
         }

@@ -44,6 +44,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     public void bindLightmap(Viewport<?> viewport) {
         glBindSampler(1, 0);
         glBindTextureUnit(1, this.nostalgicLightmap.getTexture(viewport.frameId));
+        glUniform1i(7, this.nostalgicLightmap.isPrefiltered() ? 1 : 0);
     }
 
     private final SSAO ssao = SSAO.createSSAO(SSAO.SSAOMode.AUTO);
@@ -110,7 +111,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         if (range != null && !environmental) {
             fogStart = range[0];
             fogEnd = range[1];
-            shape = 2f; // RenderDistanceTracker tracks an XZ circle, not a sphere.
+            shape = 2f; // XZ fog
         }
         if (Float.isFinite(fogEnd) && fogEnd - fogStart > 1f && fogEnd < 1.0e8f) {
             float invDelta = 1f / (fogEnd - fogStart);

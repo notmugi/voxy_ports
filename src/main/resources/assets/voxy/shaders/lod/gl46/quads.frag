@@ -156,31 +156,25 @@ void main() {
         return;
     }
 
-    #ifndef TRANSLUCENT
-    // Vanilla cutout holes have no depth and cannot mask a solid LOD copy
-    // of the same tree. Exclude foliage inside built Sodium section bounds.
-    // Do NOT apply this to ground or fluids: coarse bounds can hide their
-    // boundary gap-fill geometry. Iris binds the same viewport-sized bounds,
-    // rasterized with the same projection and shaderpack TAA as LOD terrain.
+    // Skip leaves and fluids inside loaded terrain bounds.
     #ifdef PATCHED_SHADER
-    // Iris already reads models here; retain its existing packed flag ABI.
-    bool isLeaf = (modelData[getModelId()].flagsA & 256u) != 0u;
+    #ifdef TRANSLUCENT
+    bool excludeNativeOverlap = (modelData[getModelId()].flagsA & 512u) != 0u;
     #else
-    bool isLeaf = (interData.x & 128u) != 0u;
+    bool excludeNativeOverlap = (modelData[getModelId()].flagsA & 768u) != 0u;
     #endif
-    if (isLeaf) {
+    #else
+    bool excludeNativeOverlap = (interData.x & 128u) != 0u;
+    #endif
+    if (excludeNativeOverlap) {
         float sectionExitDepth = texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r;
-        // A leaf top can coincide with the section's exit face when viewed
-        // from below. Include that boundary, undo outline.vsh's clip-z bias,
-        // and allow two D24 steps for rasterization/rounding disagreement.
-        // A fixed negative window-depth tolerance leaves these faces solid.
+        // Include the exit face and undo the outline depth bias.
         float exitTolerance = 0.00025 * gl_FragCoord.w + 2.0 / 16777215.0;
         if (sectionExitDepth > 0.0 && gl_FragCoord.z <= sectionExitDepth + exitTolerance) {
             discard;
             return;
         }
     }
-    #endif
 
 
     //Also, small quad is really fking over the mipping level somehow

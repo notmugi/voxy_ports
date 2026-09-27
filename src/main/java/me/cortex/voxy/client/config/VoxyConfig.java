@@ -6,7 +6,6 @@ import com.google.gson.GsonBuilder;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.cpu.CpuLayout;
 import me.cortex.voxy.commonImpl.VoxyCommon;
-import net.caffeinemc.mods.sodium.client.gui.options.storage.OptionStorage;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.FileReader;
@@ -15,7 +14,7 @@ import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class VoxyConfig implements OptionStorage<VoxyConfig> {
+public class VoxyConfig {
     private static final Gson GSON = new GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .setPrettyPrinting()
@@ -28,16 +27,16 @@ public class VoxyConfig implements OptionStorage<VoxyConfig> {
     public boolean enableRendering = true;
     public boolean ingestEnabled = true;
     public int sectionRenderDistance = 4; // 128 chunks
-    public int serviceThreads = 10;
+    public int serviceThreads = 2;
     public float subDivisionSize = 63.497753f;
     public boolean renderVanillaFog = false;
     public boolean massiveClouds = true;
-    public int cloudHeight = 320;
-    public int cloudCellSize = 48;
-    public int cloudThickness = 40;
+    public int cloudHeight = 400;
+    public int cloudCellSize = 72;
+    public int cloudThickness = 36;
     public int cloudSpeed = 500; // Percent of the original 0.03 blocks/tick.
-    public int cloudFadeStart = 36;
-    public int cloudFadeEnd = 99;
+    public int cloudFadeStart = 10;
+    public int cloudFadeEnd = 90;
     public boolean renderStatistics = false;
     public boolean dontUseSodiumBuilderThreads = false;
 
@@ -110,7 +109,6 @@ public class VoxyConfig implements OptionStorage<VoxyConfig> {
                 .resolve("voxy-config.json");
     }
 
-    @Override
     public VoxyConfig getData() {
         return this;
     }

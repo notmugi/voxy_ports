@@ -23,17 +23,21 @@ vec4 cellColour(ivec2 cell) {
 }
 
 void main() {
-    // Use a mid-depth ray; reconstructing the far plane needlessly loses precision.
-    vec3 ray = normalize(unproject(UV, 0.5));
+    // Bobbing moves the eye too.
+    vec4 eye = inverseMVP * vec4(0.0, 0.0, 1.0, 0.0);
+    vec3 rayOrigin = eye.xyz / eye.w;
+    // Mid depth is precise enough.
+    vec3 ray = normalize(unproject(UV, 0.5) - rayOrigin);
     float horizontal = length(ray.xz);
-    float endT = cloudRange.z / max(horizontal, 1e-8);
+    // Clamp to the fog cylinder.
+    float endT = (cloudRange.z + length(rayOrigin.xz)) / max(horizontal, 1e-8);
     float startT = 0.0;
     float shade = 0.85;
     if (abs(ray.y) < 1e-8) {
-        if (cloudOrigin.z > 0.0 || cloudOrigin.z + cloudOrigin.w < 0.0) discard;
+        if (cloudOrigin.z > rayOrigin.y || cloudOrigin.z + cloudOrigin.w < rayOrigin.y) discard;
     } else {
-        float a = cloudOrigin.z / ray.y;
-        float b = (cloudOrigin.z + cloudOrigin.w) / ray.y;
+        float a = (cloudOrigin.z - rayOrigin.y) / ray.y;
+        float b = (cloudOrigin.z + cloudOrigin.w - rayOrigin.y) / ray.y;
         startT = max(0.0, min(a, b));
         endT = min(endT, max(a, b));
         shade = ray.y > 0.0 ? 0.72 : 1.0;
@@ -42,11 +46,11 @@ void main() {
 
     float sceneDepth = texture(lodDepth, UV).r;
     if (sceneDepth > 0.0 && sceneDepth < 1.0) {
-        endT = min(endT, length(unproject(UV, sceneDepth)) - 0.05);
+        endT = min(endT, length(unproject(UV, sceneDepth) - rayOrigin) - 0.05);
     }
     if (endT <= startT) discard;
 
-    vec2 origin = cloudOrigin.xy;
+    vec2 origin = cloudOrigin.xy + rayOrigin.xz / cloudRange.x;
     vec2 direction = ray.xz / cloudRange.x;
     ivec2 cell = ivec2(floor(origin + direction * (startT + 0.001)));
     ivec2 stepCell = ivec2(sign(direction));
@@ -60,15 +64,15 @@ void main() {
         }
     }
     float t = startT;
-    // Max RD 32768, fade end <=99%, cells >=48: <960 crossed cells along any ray.
+    // 1024 steps covers max settings.
     for (int i = 0; i < 1024 && t < endT; i++) {
         vec4 texel = cellColour(cell);
         if (texel.a > 0.1) {
-            vec3 hit = ray * max(t, 0.001);
+            vec3 hit = rayOrigin + ray * max(t, 0.001);
             float fade = 1.0 - smoothstep(cloudRange.y, cloudRange.z, length(hit.xz));
             if (fade <= 0.0) discard;
             vec4 clip = sourceMVP * vec4(hit, 1.0);
-            // Same source-depth convention as Voxy's terrain composite, beyond vanilla's far plane.
+            // Match terrain depth.
             float ndcDepth = min(1.0 - 2.0 / 16777215.0, clip.z / clip.w);
             gl_FragDepth = gl_DepthRange.near + gl_DepthRange.diff * (ndcDepth * 0.5 + 0.5);
             colour = vec4(texel.rgb * cloudColour * shade, 0.8 * texel.a * fade);
