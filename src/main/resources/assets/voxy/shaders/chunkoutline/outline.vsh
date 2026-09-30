@@ -16,7 +16,8 @@ ivec3 unpackPos(ivec2 pos) {
 
 bool shouldRender(ivec3 icorner) {
     vec3 corner = vec3(mix(mix(ivec3(0), icorner-1, greaterThan(icorner-1, ivec3(0))), icorner+17, lessThan(icorner+17, ivec3(0))))-negInnerSec.xyz;
-    bool visible = (corner.x*corner.x + corner.z*corner.z) < (negInnerSec.w*negInnerSec.w*2.25f);//*1.5 to cover the square corners of the vanilla render distance
+    bool visible = (corner.x*corner.x + corner.z*corner.z) < (negInnerSec.w*negInnerSec.w);
+    visible = visible && abs(corner.y) < negInnerSec.w;
     return visible;
 }
 
@@ -30,7 +31,10 @@ void main() {
     ivec3 origin = unpackPos(chunkPos[id])*16;
     origin -= section.xyz;
 
-    //Rasterize every tracked vanilla section; the tracked set is exactly what sodium renders
+    if (!shouldRender(origin)) {
+        gl_Position = vec4(-100.0f, -100.0f, -100.0f, 0.0f);
+        return;
+    }
 
     vec3 cubeCorner = vec3(ivec3(gl_VertexID&1, (gl_VertexID>>2)&1, (gl_VertexID>>1)&1)*16);
     //Inflate slightly so geometry co-planar with the section edge (e.g. leaf top faces
