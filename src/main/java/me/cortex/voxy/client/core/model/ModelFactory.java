@@ -369,6 +369,7 @@ public class ModelFactory {
         boolean isFluid = blockState.getBlock() instanceof LiquidBlock;
         // Only tag the fluid model, not waterlogged hosts.
         lightingFlags |= isFluid ? 1 << 9 : 0;
+        lightingFlags |= ItemBlockRenderTypes.getChunkRenderType(blockState) != RenderType.solid() ? 1 << 9 : 0;
         int modelId = -1;
 
 
