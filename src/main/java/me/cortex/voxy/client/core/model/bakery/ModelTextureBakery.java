@@ -119,7 +119,7 @@ public class ModelTextureBakery {
 
             @Override
             public BlockState getBlockState(BlockPos pos) {
-                if (shouldReturnAirForFluid(pos, face)) {
+                if (shouldReturnAirForFluid(pos, face) || pos.getY() == 1) {
                     return Blocks.AIR.defaultBlockState();
                 }
 
@@ -137,7 +137,7 @@ public class ModelTextureBakery {
 
             @Override
             public FluidState getFluidState(BlockPos pos) {
-                if (shouldReturnAirForFluid(pos, face)) {
+                if (shouldReturnAirForFluid(pos, face) || pos.getY() == 1) {
                     return Blocks.AIR.defaultBlockState().getFluidState();
                 }
 
