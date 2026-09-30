@@ -30,10 +30,7 @@ void main() {
     ivec3 origin = unpackPos(chunkPos[id])*16;
     origin -= section.xyz;
 
-    if (!shouldRender(origin)) {
-        gl_Position = vec4(-100.0f, -100.0f, -100.0f, 0.0f);
-        return;
-    }
+    //Rasterize every tracked vanilla section; the tracked set is exactly what sodium renders
 
     vec3 cubeCorner = vec3(ivec3(gl_VertexID&1, (gl_VertexID>>2)&1, (gl_VertexID>>1)&1)*16);
     //Inflate slightly so geometry co-planar with the section edge (e.g. leaf top faces
