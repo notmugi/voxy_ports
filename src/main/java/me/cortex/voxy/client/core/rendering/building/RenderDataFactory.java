@@ -705,7 +705,7 @@ public class RenderDataFactory {
                         // Also don't cull if SELF is mixed (this block is a boundary surface)
                         // Also don't cull if this direction faces vanilla-rendered chunks
                         boolean neighborIsMixed = Mapper.isMixed(neighborId);
-                        if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanilla) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
+                        if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
                             int modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
                             long meta = this.modelMan.getModelMetadataFromClientId(modelId);
                             if (ModelQueries.containsFluid(meta)) {
@@ -1357,7 +1357,7 @@ public class RenderDataFactory {
                     // Also don't cull if SELF is mixed (this block is a boundary surface)
                     // Also don't cull if this direction faces vanilla-rendered chunks
                     boolean neighborIsMixed = Mapper.isMixed(neighborId);
-                    if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanillaNegX) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
+                    if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
 
                         int modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
                         long meta = this.modelMan.getModelMetadataFromClientId(modelId);
@@ -1425,7 +1425,7 @@ public class RenderDataFactory {
                     // Also don't cull if SELF is mixed (this block is a boundary surface)
                     // Also don't cull if this direction faces vanilla-rendered chunks
                     boolean neighborIsMixed = Mapper.isMixed(neighborId);
-                    if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanillaPosX) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
+                    if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
                         int modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
                         long meta = this.modelMan.getModelMetadataFromClientId(modelId);
                         if (ModelQueries.isFullyOpaque(meta)) {
