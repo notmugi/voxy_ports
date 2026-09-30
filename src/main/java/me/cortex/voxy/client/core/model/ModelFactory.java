@@ -640,6 +640,17 @@ public class ModelFactory {
             MemoryUtil.memPutInt(uploadPtr, -1);//Set the default to nothing so that its faster on the gpu
         } else if (!isBiomeColourDependent) {
             MemoryUtil.memPutInt(uploadPtr, entry.tintingColour);
+        } else if (TINT_PROVIDER != null) {
+            int keys = TINT_PROVIDER.keyCount();
+            int biomeIndex = this.modelsRequiringBiomeColours.size() * keys;
+            MemoryUtil.memPutInt(uploadPtr, biomeIndex);
+            this.modelsRequiringBiomeColours.add(new Pair<>(modelId, blockState));
+
+            uploadResult.biomeUploadIndex = biomeIndex;
+            long clrUploadPtr = (uploadResult.biomeUpload = new MemoryBuffer(4L * keys)).address;
+            for (int k = 0; k < keys; k++) {
+                MemoryUtil.memPutInt(clrUploadPtr, this.captureProviderColour(colourProvider, blockState, k)|0xFF000000); clrUploadPtr += 4;
+            }
         } else if (!this.biomes.isEmpty()) {
             //Populate the list of biomes for the model state
             int biomeIndex = this.modelsRequiringBiomeColours.size() * this.biomes.size();
@@ -735,6 +746,7 @@ public class ModelFactory {
         }
 
         if (this.modelsRequiringBiomeColours.isEmpty()) return null;
+        if (TINT_PROVIDER != null) return null;
 
         var result = new BiomeUploadResult(this.biomes.size(), this.modelsRequiringBiomeColours.size());
 
@@ -769,6 +781,30 @@ public class ModelFactory {
     //TODO: add a method to detect biome dependent colours (can do by detecting if getColor is ever called)
     // if it is, need to add it to a list and mark it as biome colour dependent or something then the shader
     // will either use the uint as an index or a direct colour multiplier
+    private static final me.cortex.voxy.client.api.VoxyTintProviders.TintProvider TINT_PROVIDER = me.cortex.voxy.client.api.VoxyTintProviders.get();
+
+    private int captureProviderColour(BlockColor colorProvider, BlockState state, int key) {
+        final Biome fallback = DEFAULT_BIOME;
+        return colorProvider.getColor(state, new BlockAndTintGetter() {
+            @Override public float getShade(Direction direction, boolean shaded) { return 0; }
+            @Override public int getBrightness(LightLayer type, BlockPos pos) { return 0; }
+            @Override public LevelLightEngine getLightEngine() { return null; }
+            @Override
+            public int getBlockTint(BlockPos pos, ColorResolver colorResolver) {
+                int kind = colorResolver == net.minecraft.client.renderer.BiomeColors.GRASS_COLOR_RESOLVER ? me.cortex.voxy.client.api.VoxyTintProviders.KIND_GRASS
+                        : colorResolver == net.minecraft.client.renderer.BiomeColors.FOLIAGE_COLOR_RESOLVER ? me.cortex.voxy.client.api.VoxyTintProviders.KIND_FOLIAGE
+                        : me.cortex.voxy.client.api.VoxyTintProviders.KIND_OTHER;
+                int c = TINT_PROVIDER.tint(kind, key);
+                return c != -1 ? c : colorResolver.getColor(fallback, 0, 0);
+            }
+            @Nullable @Override public BlockEntity getBlockEntity(BlockPos pos) { return null; }
+            @Override public BlockState getBlockState(BlockPos pos) { return state; }
+            @Override public FluidState getFluidState(BlockPos pos) { return state.getFluidState(); }
+            @Override public int getHeight() { return 0; }
+            @Override public int getMinBuildHeight() { return 0; }
+        }, BlockPos.ZERO, 0);
+    }
+
     private static int captureColourConstant(BlockColor colorProvider, BlockState state, Biome biome) {
         return colorProvider.getColor(state, new BlockAndTintGetter() {
             @Override

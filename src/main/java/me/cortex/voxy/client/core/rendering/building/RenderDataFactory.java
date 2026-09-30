@@ -242,8 +242,19 @@ public class RenderDataFactory {
         return quadData;
     }
 
-    private int prepareSectionData(final long[] rawSectionData) {
+    private final int[] tintKeys = new int[32*32];
+
+    private int prepareSectionData(final WorldSection section, final long[] rawSectionData) {
         final var sectionData = this.sectionData;
+        final var tintProvider = me.cortex.voxy.client.api.VoxyTintProviders.get();
+        if (tintProvider != null) {
+            int scale = 1<<section.lvl;
+            for (int j = 0; j < 32*32; j++) {
+                int bx = ((section.x<<5)+(j&31))*scale + (scale>>1);
+                int bz = ((section.z<<5)+(j>>5))*scale + (scale>>1);
+                this.tintKeys[j] = tintProvider.key(bx, bz) & 0x1FF;
+            }
+        }
         final var rawModelIds = this.modelMan._unsafeRawAccess();
         long opaque = 0;
         long notEmpty = 0;
@@ -264,6 +275,9 @@ public class RenderDataFactory {
                 }
                 long modelMetadata = this.modelMan.getModelMetadataFromClientId(modelId);
 
+                if (tintProvider != null && ModelQueries.isBiomeColoured(modelMetadata)) {
+                    block = (block&~(0x1FFL<<47))|(Integer.toUnsignedLong(this.tintKeys[i&1023])<<47);
+                }
                 sectionData[i * 2] = packPartialQuadData(modelId, block, modelMetadata);
                 sectionData[i * 2 + 1] = modelMetadata;
 
@@ -1762,7 +1776,7 @@ public class RenderDataFactory {
         Arrays.fill(this.fluidMasks, 0);
 
         //Prepare everything
-        int neighborMskAndFlags = this.prepareSectionData(section._unsafeGetRawDataArray());
+        int neighborMskAndFlags = this.prepareSectionData(section, section._unsafeGetRawDataArray());
         if ((neighborMskAndFlags&(1<<31))!=0) {//We failed to get everything so throw exception
             throw new IdNotYetComputedException(neighborMskAndFlags&((1<<20)-1), true);
         }
