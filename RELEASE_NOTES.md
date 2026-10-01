@@ -9,3 +9,4 @@
 - Fixed water and ice disappearing at a distance
 - Fixed water and ice brightness differences caused by blending
 - Added contact shading to ice
+- Changed leaf fade method to better deal with transparency sorting

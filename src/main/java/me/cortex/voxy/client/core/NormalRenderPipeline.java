@@ -122,7 +122,8 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     public static float[] borderFadeRange() {
         if (!VoxyConfig.CONFIG.borderFade) return null;
         float border = Minecraft.getInstance().options.renderDistance().get() * 16.0f;
-        return new float[]{Math.max(8.0f, border - Math.min(32.0f, border * 0.25f)), border};
+        float start = Math.max(8.0f, border - Math.min(32.0f, border * 0.25f));
+        return new float[]{start, border};
     }
 
     private static final float[] FADE_MAT = new float[16];

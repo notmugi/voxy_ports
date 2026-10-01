@@ -14,6 +14,7 @@ public abstract class Viewport <A extends Viewport<A>> {
     public final DepthFramebuffer depthBoundingBuffer = new DepthFramebuffer();
     public GlBuffer nativeSectionMembership;
     public int nativeSectionTableSize;
+    public float nativeCoverageRadius;
 
     private static final Field planesField;
     static {

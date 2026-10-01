@@ -7,11 +7,20 @@ layout(std430,binding=1) buffer Counts { uint counts[]; };
 layout(std430,binding=2) writeonly buffer Output { DrawCommand outputCommands[]; };
 layout(std430,binding=3) readonly buffer Sections { SectionMeta sections[]; };
 layout(std430,binding=4) readonly buffer Lookup { uint sectionCount; uint lookup[]; };
+layout(location=0) uniform float nativeCoverageRadius;
 void main() {
     uint stride = gl_NumWorkGroups.x*128u;
     for (uint i=gl_GlobalInvocationID.x;i<counts[3];i+=stride) {
         DrawCommand command = source[i];
         SectionMeta section = sections[lookup[command.baseInstance]];
+        if (nativeCoverageRadius > 0.0) {
+            float scale = float(1u << extractDetail(section));
+            vec3 origin = (vec3(extractPosition(section))*scale - vec3(baseSectionPos))*32.0 - cameraSubPos;
+            vec3 lo = origin + vec3(extractAABBOffset(section))*scale;
+            vec3 hi = lo + vec3(extractAABBSize(section))*scale;
+            vec3 nearest = max(max(lo, -hi), vec3(0));
+            if (dot(nearest, nearest) > nativeCoverageRadius*nativeCoverageRadius) continue;
+        }
         uint flags = section.a.z;
         // Keep meshes without flags.
         if ((flags & 0x80000000u) != 0u && (flags & 0x40000000u) == 0u) continue;

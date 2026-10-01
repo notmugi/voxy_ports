@@ -35,6 +35,7 @@ void main() {
     bool nativeBand = nativeDistance > fadeRange.x;
     float f = nativeBand ? smoothstep(fadeRange.x,fadeRange.y,nativeDistance) : 1.0;
     float c = 0.0;
+    float coveredLeafDepth = nd;
     vec4 leaf = vec4(0);
     if (hasCutout) {
         float cd = texture(cutoutDepthTex,UV).r;
@@ -44,12 +45,27 @@ void main() {
             leaf = texture(cutoutColourTex,UV);
             leaf.rgb = fog(leaf.rgb,cp);
             c *= leaf.a;
+            if ((metadata & 56u) == 56u) {
+                // Rear LOD leaves must not override the native leaf's fade weight.
+                if (nd < 1.0) {
+                    const mat4 bayer = mat4(0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+                    ivec2 pixel = ivec2(gl_FragCoord.xy) & 3;
+                    float threshold = (bayer[pixel.x][pixel.y] + 0.5) / 16.0;
+                    float inset = (fadeRange.y - fadeRange.x) * 0.125;
+                    float nativeLeafWeight = smoothstep(fadeRange.x + inset, fadeRange.y - inset, nativeDistance);
+                    if (!nativeBand || nativeLeafWeight <= threshold) discard;
+                }
+                c = leaf.a;
+                f = 1.0;
+                vec4 clip = projMat * vec4(cp, 1.0);
+                coveredLeafDepth = min(nd, min(clip.z / clip.w, 1.0-2.0/16777215.0)*0.5+0.5);
+            }
         }
     }
 
     float backgroundWeight = 0.0;
     vec3 background = vec3(0);
-    gl_FragDepth = nd;
+    gl_FragDepth = coveredLeafDepth;
     if (hasBackground) {
         vec3 bp = position(invProjMat,bd);
         vec4 clip = projMat*vec4(bp,1.0);
@@ -60,7 +76,7 @@ void main() {
             backgroundWeight = max(0.0,f-c)*b.a;
         } else if (projected <= nd) {
             backgroundWeight = (1.0-c)*b.a;
-            if (b.a > 0.0) gl_FragDepth = projected;
+            if (b.a > 0.0) gl_FragDepth = min(coveredLeafDepth, projected);
         }
     }
     // One premultiplied blend: native*(1-F) + world*(F-C) + cutout*C.

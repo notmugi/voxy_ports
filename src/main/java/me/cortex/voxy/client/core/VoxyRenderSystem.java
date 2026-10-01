@@ -270,6 +270,7 @@ public class VoxyRenderSystem {
         } else {
             viewport.depthBoundingBuffer.clear(0);
             viewport.nativeSectionTableSize = 0;
+            viewport.nativeCoverageRadius = 0;
         }
         TimingStatistics.E.stop();
 

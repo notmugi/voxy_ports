@@ -158,16 +158,11 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         ptr += 4;// std140 padding to the next member
         float fadeStart = 0;
         float fadeEnd = 0;// disabled; negative means normal-pipeline fade
-        // The vanilla pipeline gets the post-process cross-fade instead.
-        if (VoxyConfig.CONFIG.borderFade && IrisUtil.irisShaderPackEnabled()) {
-            float border = Minecraft.getInstance().options.renderDistance().get() * 16.0f;
-            fadeStart = Math.max(8.0f, border - Math.min(32.0f, border * 0.25f));
-            fadeEnd = border;
-        } else if (VoxyConfig.CONFIG.borderFade) {
-            // Negative end: no dither, only lifts native-overlap culling inside the band.
+        if (VoxyConfig.CONFIG.borderFade) {
             float[] range = NormalRenderPipeline.borderFadeRange();
             fadeStart = range[0];
-            fadeEnd = -range[1];
+            // Iris dithers; the normal pipeline composites the same band.
+            fadeEnd = IrisUtil.irisShaderPackEnabled() ? range[1] : -range[1];
         }
         MemoryUtil.memPutFloat(ptr, fadeStart); ptr += 4;
         MemoryUtil.memPutFloat(ptr, fadeEnd); ptr += 4;
@@ -219,6 +214,7 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
             if (viewport.fadeDrawBuffer == null) viewport.fadeDrawBuffer = new GlBuffer(OPAQUE_DRAW_COUNT*20L);
             viewport.drawCountCallBuffer.zeroRange(44, 4);
             this.fadeCommandShader.bind();
+            org.lwjgl.opengl.GL20C.glUniform1f(0, viewport.nativeCoverageRadius);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, viewport.drawCallBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, viewport.drawCountCallBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.fadeDrawBuffer.id);

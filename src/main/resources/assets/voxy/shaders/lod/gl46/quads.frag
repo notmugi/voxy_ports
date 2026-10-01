@@ -177,6 +177,20 @@ float iceContactAO() {
 #endif
 
 void main() {
+    #ifndef TRANSLUCENT
+    #ifdef PATCHED_SHADER
+    bool isLeaf = (modelData[getModelId()].flagsA & 256u) != 0u;
+    #else
+    bool isLeaf = (interData.w & (1u << 17)) != 0u;
+    #endif
+    if (isLeaf) {
+        uint face = getFace();
+        vec3 normal = vec3(uint((face >> 1) == 2u), uint((face >> 1) == 0u), uint((face >> 1) == 1u))
+                * (float(face & 1u) * 2.0 - 1.0);
+        // Section culling alone still admits the inside of a leaf cube.
+        if (dot(normal, vPos) >= 0.0) discard;
+    }
+    #endif
     #ifdef TRANSLUCENT
     #ifdef PATCHED_SHADER
     bool isIce = (modelData[getModelId()].flagsA & 2048u) != 0u;
@@ -192,7 +206,14 @@ void main() {
     }
     #endif
     if (lodFadeRange.y > 0.0f) {
-        float lodFade = smoothstep(lodFadeRange.x, lodFadeRange.y, length(vPos));
+        vec2 range = lodFadeRange;
+        #ifndef TRANSLUCENT
+        if (isLeaf) {
+            float inset = (range.y - range.x) * 0.125;
+            range += vec2(inset, -inset);
+        }
+        #endif
+        float lodFade = smoothstep(range.x, range.y, length(vPos));
         if (lodFade <= lodBorderBayer(gl_FragCoord.xy)) {
             discard;
             return;
@@ -272,12 +293,18 @@ void main() {
 #if !defined(PATCHED_SHADER) && !defined(TRANSLUCENT)
     // Fading cutouts must not occlude the background or enter its HiZ buffer.
     if (fadeNativeOverlap != (cutoutFadePass == 1)) discard;
+    if (isLeaf && fadeNativeOverlap) {
+        float end = -lodFadeRange.y;
+        float inset = (end - lodFadeRange.x) * 0.125;
+        float coverage = smoothstep(lodFadeRange.x + inset, end - inset, length(vPos.xz));
+        if (coverage <= lodBorderBayer(gl_FragCoord.xy)) discard;
+    }
 #endif
 
     // Test alpha at mip 0 to retain small faces.
     #ifndef TRANSLUCENT
     colour.a = 1.0f;
-    if (useDiscard() && (textureLod(blockModelAtlas, texPos, 0).a <= 0.1f)) {
+    if (useDiscard() && textureLod(blockModelAtlas, texPos, 0).a <= 0.1f) {
     #else
     if (textureLod(blockModelAtlas, texPos, 0).a == 0.0f) {
     #endif
@@ -301,7 +328,12 @@ void main() {
     #endif
     #ifndef TRANSLUCENT
     // Bit 7 survives in the raw colour buffer for the fade composite.
-    if (fadeNativeOverlap) colour.a += 128.0/255.0;
+    if (fadeNativeOverlap) {
+        uint metadata = uint(round(colour.a * 255.0));
+        // LOD 7 is reserved for depth-tested leaf coverage.
+        if (isLeaf) metadata = (metadata & ~56u) | 56u;
+        colour.a = float(metadata | 128u) / 255.0;
+    }
     #endif
     outColour = colour;
 

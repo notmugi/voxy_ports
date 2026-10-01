@@ -681,7 +681,7 @@ public class ModelFactory {
 
         // TODO callback to inject extra data into the model data
 
-        MipGen.putTextures(darkenedTinting, textureData, uploadResult.texture);
+        MipGen.putTextures(darkenedTinting, textureData, uploadResult.texture, blockState.getBlock() instanceof LeavesBlock);
 
         // Set the mapping at the very end
         this.idMappings[blockId] = modelId;

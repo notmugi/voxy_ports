@@ -95,6 +95,7 @@ public class ChunkBoundRenderer {
             this.remQueue.clear();
             if (this.chunk2idx.isEmpty()&&!wasEmpty) {// When going from stuff to nothing need to clear the depth buffer
                 viewport.depthBoundingBuffer.clear(0);
+        viewport.nativeCoverageRadius = 0;
             }
         }
 
@@ -106,6 +107,7 @@ public class ChunkBoundRenderer {
         }
         // Also clear after reset/last removal, including every active viewport.
         viewport.depthBoundingBuffer.clear(0);
+        viewport.nativeCoverageRadius = 0;
         // Use Sodium's visible sections, including any modded distance rules.
         int count;
         if (renderLists != null) {
@@ -134,6 +136,16 @@ public class ChunkBoundRenderer {
             this.visibleSections.clear();
             for (int i = 0; i < count; i++) this.visibleSections.add(this.idx2chunk[i]);
         }
+        double radiusSquared = 0;
+        for (int i = 0; i < this.visibleSections.size(); i++) {
+            long key = this.visibleSections.getLong(i);
+            double x = Math.abs(SectionPos.x(key)*16.0 + 8 - viewport.cameraX) + 8;
+            double y = Math.abs(SectionPos.y(key)*16.0 + 8 - viewport.cameraY) + 8;
+            double z = Math.abs(SectionPos.z(key)*16.0 + 8 - viewport.cameraZ) + 8;
+            radiusSquared = Math.max(radiusSquared, x*x + y*y + z*z);
+        }
+        // Leave room for view bobbing and section-exit depth tolerance.
+        viewport.nativeCoverageRadius = (float)Math.sqrt(radiusSquared) + 64;
         this.uploadMembership(viewport);
 
         long ptr = UploadStream.INSTANCE.upload(this.uniformBuffer, 0, 128);
