@@ -40,7 +40,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         }
         this.data.thePipeline = this;
 
-        //Bind the drawbuffers
+        // Bind the drawbuffers
         var oDT = this.data.opaqueDrawTargets;
         int[] binding = new int[oDT.length];
         for (int i = 0; i < oDT.length; i++) {
@@ -95,7 +95,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
     public void preSetup(Viewport<?> viewport) {
         super.preSetup(viewport);
         if (this.shaderUniforms != null) {
-            //Update the uniforms
+            // Update the uniforms
             long ptr = UploadStream.INSTANCE.uploadTo(this.shaderUniforms);
             this.data.getUniforms().updater().accept(ptr);
             UploadStream.INSTANCE.commit();
@@ -108,8 +108,8 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         this.fb.resize(viewport.width, viewport.height);
         this.fbTranslucent.resize(viewport.width, viewport.height);
 
-        if (false) {//TODO: only do this if shader specifies
-            //Clear the colour component
+        if (false) {// TODO: only do this if shader specifies
+            // Clear the colour component
             glBindFramebuffer(GL_FRAMEBUFFER, this.fb.framebuffer.id);
             glClearColor(0, 0, 0, 0);
             glClear(GL_COLOR_BUFFER_BIT);
@@ -139,8 +139,8 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         glTextureBarrier();
 
         int msk = GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
-        if (true) {//TODO: make shader specified
-            if (false) {//TODO: only do this if shader specifies
+        if (true) {// TODO: make shader specified
+            if (false) {// TODO: only do this if shader specifies
                 glBindFramebuffer(GL_FRAMEBUFFER, this.fbTranslucent.framebuffer.id);
                 glClearColor(0, 0, 0, 0);
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -153,7 +153,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
 
     @Override
     protected void finish(Viewport<?> viewport, int sourceFrameBuffer, int srcWidth, int srcHeight) {
-        if (this.data.renderToVanillaDepth && srcWidth == viewport.width  && srcHeight == viewport.height) {//We can only depthblit out if destination size is the same
+        if (this.data.renderToVanillaDepth && srcWidth == viewport.width  && srcHeight == viewport.height) {// We can only depthblit out if destination size is the same
             glColorMask(false, false, false, false);
             AbstractRenderPipeline.transformBlitDepth(this.depthBlit,
                     this.fbTranslucent.getDepthTex().id, sourceFrameBuffer,
@@ -164,7 +164,6 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
             glDisable(GL_STENCIL_TEST);
         }
     }
-
 
     @Override
     public void bindUniforms() {
@@ -208,7 +207,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         super.addDebug(debug);
     }
 
-    private static final int UNIFORM_BINDING_POINT = 5;//TODO make ths binding point... not randomly 5
+    private static final int UNIFORM_BINDING_POINT = 5;// TODO make ths binding point... not randomly 5
 
     private StringBuilder buildGenericShaderHeader(AbstractSectionRenderer<?, ?> renderer, String input) {
         StringBuilder builder = new StringBuilder(input).append("\n\n\n");
@@ -220,19 +219,17 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         }
 
         if (this.data.getSsboSet() != null) {
-            builder.append("#define BUFFER_BINDING_INDEX_BASE 10\n");//TODO: DONT RANDOMLY MAKE THIS 10
+            builder.append("#define BUFFER_BINDING_INDEX_BASE 10\n");// TODO: DONT RANDOMLY MAKE THIS 10
             builder.append(this.data.getSsboSet().layout()).append("\n\n");
         }
 
         if (this.data.getImageSet() != null) {
-            builder.append("#define BASE_SAMPLER_BINDING_INDEX 6\n");//TODO: DONT RANDOMLY MAKE THIS 6
+            builder.append("#define BASE_SAMPLER_BINDING_INDEX 6\n");// TODO: DONT RANDOMLY MAKE THIS 6
             builder.append(this.data.getImageSet().layout()).append("\n\n");
         }
 
         return builder.append("\n\n");
     }
-
-
 
     @Override
     public String patchOpaqueShader(AbstractSectionRenderer<?, ?> renderer, String input) {

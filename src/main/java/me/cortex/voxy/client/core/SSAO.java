@@ -43,11 +43,11 @@ public class SSAO {
         } else if (mode == SSAOMode.AUTO) {
             if (Capabilities.INSTANCE.canQueryGpuMemory) {
                 if (Capabilities.INSTANCE.totalDedicatedMemory < 2_500_000_000L) {
-                    return createSSAO(SSAOMode.BASIC);//Create a basic instance (cant query memory (probably intel igpu or less then 2.5gb vram)
+                    return createSSAO(SSAOMode.BASIC);// Create a basic instance (cant query memory (probably intel igpu or less then 2.5gb vram)
                 } else if (Capabilities.INSTANCE.totalDedicatedMemory < 7_000_000_000L) {
-                    return createSSAO(SSAOMode.BETTER);//Less then 7gb of dedicated vram create a better instance (mid range dgpus (they can probably do best just fine but just in case)
+                    return createSSAO(SSAOMode.BETTER);// Less then 7gb of dedicated vram create a better instance (mid range dgpus (they can probably do best just fine but just in case)
                 } else {
-                    return createSSAO(SSAOMode.BEST);//create the best ssao
+                    return createSSAO(SSAOMode.BEST);// create the best ssao
                 }
             } else {
                 if (Capabilities.INSTANCE.isAmd) {
@@ -111,7 +111,7 @@ public class SSAO {
         this.ssaoCompute = builder.compile();
 
         this.depthSampler = glCreateSamplers();
-        //UHHHH IS THIS EVEN VALID FOR A DEPTH SAMPLER????
+        // UHHHH IS THIS EVEN VALID FOR A DEPTH SAMPLER????
         if (this.isBetterSSAO) {
             // Sample the base depth level explicitly; no mip chain is needed.
             glSamplerParameteri(this.depthSampler, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -133,24 +133,24 @@ public class SSAO {
     public void computeSSAO(Viewport<?> viewport, GlTexture colourOut, GlTexture colourIn, GlTexture baseDepthTex, int sourceDepthTexture, boolean cutoutOnly) {
         this.ssaoCompute.bind();
         org.lwjgl.opengl.GL20C.glUniform1i(8, cutoutOnly ? 1 : 0);
-        //The matrices
+        // The matrices
         try (var stack = MemoryStack.stackPush()) {
             long ptr = stack.nmalloc(4*4*4);
             var scratch = new Matrix4f();
             if (this.isBetterSSAO) {
                 viewport.projection.getToAddress(ptr);
-                nglUniformMatrix4fv(4, 1, false, ptr);//Proj
+                nglUniformMatrix4fv(4, 1, false, ptr);// Proj
                 viewport.projection.invert(scratch).getToAddress(ptr);
-                nglUniformMatrix4fv(5, 1, false, ptr);//invProj
+                nglUniformMatrix4fv(5, 1, false, ptr);// invProj
                 viewport.modelView.getToAddress(ptr);
-                nglUniformMatrix4fv(6, 1, false, ptr);//MV (the normal matrix)
+                nglUniformMatrix4fv(6, 1, false, ptr);// MV (the normal matrix)
                 viewport.vanillaProjection.invert(scratch).getToAddress(ptr);
-                nglUniformMatrix4fv(7, 1, false, ptr);//sourceInvProj
+                nglUniformMatrix4fv(7, 1, false, ptr);// sourceInvProj
             } else {
                 viewport.MVP.getToAddress(ptr);
-                nglUniformMatrix4fv(3, 1, false, ptr);//MVP
+                nglUniformMatrix4fv(3, 1, false, ptr);// MVP
                 viewport.MVP.invert(scratch).getToAddress(ptr);
-                nglUniformMatrix4fv(4, 1, false, ptr);//invMVP
+                nglUniformMatrix4fv(4, 1, false, ptr);// invMVP
             }
         }
 

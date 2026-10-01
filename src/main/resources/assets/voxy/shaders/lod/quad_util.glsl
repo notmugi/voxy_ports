@@ -1,4 +1,4 @@
-//Common utility functions for decoding and operating on quads
+// Common utility functions for decoding and operating on quads
 
 vec3 swizzelDataAxis(uint axis, vec3 data) {
     return mix(mix(data.zxy,data.xzy,bvec3(axis==0)),data,bvec3(axis==1));
@@ -21,43 +21,42 @@ ivec3 extractLoDPosition(uvec2 encPos) {
 vec4 getFaceSize(uint faceData) {
     vec4 faceOffsetsSizes = extractFaceSizes(faceData);
 
-    //Make the end relative to the start
+    // Make the end relative to the start
     faceOffsetsSizes.yw -= faceOffsetsSizes.xz;
 
     return faceOffsetsSizes;
 }
 
-
-vec2 taaOffset = vec2(0);//TODO: compute this
+vec2 taaOffset = vec2(0);// TODO: compute this
 
 struct QuadData {
     uvec4 attributeData;
 
     float lodScale;
     uint axis;
-    //Used for computing the 4 corners of the quad
+    // Used for computing the 4 corners of the quad
     vec3 basePoint;
     vec2 quadSizeAddin;
     vec2 uvCorner;
 };
 
 uint makeQuadFlags(uint faceData, uint modelId, ivec2 quadSize, const in BlockModel model, uint face) {
-    //bit: 0-use cuttout, 1-dont use mipmaps, 2|3-tint state, 4|6-face, 8|11-width, 12|15-height, 16|31-model id
+    // bit: 0-use cuttout, 1-dont use mipmaps, 2|3-tint state, 4|6-face, 8|11-width, 12|15-height, 16|31-model id
     uint flags = 0;
 
-    flags |= modelId<<16;//Model id
-    flags |= (uint(quadSize.x-1)<<8)|(uint(quadSize.y-1)<<12);//quad size
+    flags |= modelId<<16;// Model id
+    flags |= (uint(quadSize.x-1)<<8)|(uint(quadSize.y-1)<<12);// quad size
 
-    {//Cuttout
+    {// Cuttout
         flags |= faceHasAlphaCuttout(faceData);
         flags |= uint(any(greaterThan(quadSize, ivec2(1)))) & faceHasAlphaCuttoutOverride(faceData);
     }
 
-    //TODO: remove, there is no non mip code path anymore
-    //flags |= uint(!modelHasMipmaps(model))<<1;//Not mipmaps
+    // TODO: remove, there is no non mip code path anymore
+    // flags |= uint(!modelHasMipmaps(model))<<1;// Not mipmaps
 
     flags |= faceTintState(faceData)<<2;
-    flags |= face<<4;//Face
+    flags |= face<<4;// Face
     #ifndef PATCHED_SHADER
     // Bit 7 marks loaded terrain overlap.
     #ifdef TRANSLUCENT
@@ -75,7 +74,6 @@ uint packVec4(vec4 vec) {
     return vec_.x|vec_.y|vec_.z|vec_.w;
 }
 
-
 #ifndef PATCHED_SHADER
 float computeDirectionalFaceTint(bool isShaded, uint face);
 #endif
@@ -85,7 +83,7 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
 
     uint lighting = extractLightId(quad);
 
-    //Apply model colour tinting
+    // Apply model colour tinting
     uint tintColour = model.colourTint;
 
     if (modelHasBiomeLUT(model)) {
@@ -98,7 +96,7 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
     #else
     bool isTranslucent = modelIsTranslucent(model);
 
-    //afak, these are the same variable in vanilla, (i.e. shaded == ao)
+    // afak, these are the same variable in vanilla, (i.e. shaded == ao)
     bool isShaded = modelIsShaded(model);
     bool hasAO = isShaded;
 
@@ -107,7 +105,7 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
     lighting = (lighting & 15u) | (max(lighting >> 4u, emission) << 4u);
     vec4 tinting = getLighting(lighting);
 
-    uint conditionalTinting = uint(-1);//White/no tint must remain neutral, never black
+    uint conditionalTinting = uint(-1);// White/no tint must remain neutral, never black
     if (tintColour != uint(-1)) {
         conditionalTinting = tintColour;
     }
@@ -115,7 +113,7 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
     uint addin = 0;
     if (!isTranslucent) {
         tinting.w = 0.0;
-        //Encode the face, the lod level and
+        // Encode the face, the lod level and
         uint encodedData = 0;
         encodedData |= face;
         encodedData |= (lodLevel<<3);
@@ -201,21 +199,20 @@ vec2 getCornerUV(const in QuadData quad, uint cornerId) {
 
 #ifndef PATCHED_SHADER
 float computeDirectionalFaceTint(bool isShaded, uint face) {
-    //Apply face tint
+    // Apply face tint
     if (isShaded) {
-        //just index on a const array with the face as an index, will be much faster
+        // just index on a const array with the face as an index, will be much faster
         // or use a vector and select/sum
         // but per face might be easier?
 
-
-        if ((face>>1) == 1) {//NORTH, SOUTH
+        if ((face>>1) == 1) {// NORTH, SOUTH
             return Z_AXIS_FACE_TINT;
-        } else if ((face>>1) == 2) {//EAST, WEST
+        } else if ((face>>1) == 2) {// EAST, WEST
             return X_AXIS_FACE_TINT;
-        } else if (face == 1) {//UP
+        } else if (face == 1) {// UP
             return UP_FACE_TINT;
         }
-        //DOWN
+        // DOWN
         return DOWN_FACE_TINT;
     } else {
         return NO_SHADE_FACE_TINT;

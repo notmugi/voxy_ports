@@ -32,7 +32,7 @@ layout(location = 8) uniform int cutoutFadePass;
 
 vec2 taaShift();
 
-//TODO: add a mechanism so that some quads can ignore backface culling
+// TODO: add a mechanism so that some quads can ignore backface culling
 // this would help alot with stuff like crops as they would look kinda weird i think,
 // same with flowers etc
 void main() {
@@ -62,12 +62,11 @@ void main() {
     uv = getCornerUV(quad, cornerId);
     #endif
 
-    //Note: other data is automatically discarded as it is undefiend and has not been generated
+    // Note: other data is automatically discarded as it is undefiend and has not been generated
     interData = quad.attributeData;
 
-
     #ifdef DEBUG_RENDER
-    //quadDebug = uint(extractDetail(pos));
+    // quadDebug = uint(extractDetail(pos));
     quadDebug = uint(gl_VertexID)>>2;
     #endif
 }

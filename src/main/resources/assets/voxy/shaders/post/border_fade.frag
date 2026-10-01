@@ -1,8 +1,6 @@
 #version 460 core
 
-// Blends the pre-LOD vanilla image back over the composited image near the
-// vanilla render border. Alpha carries the vanilla weight; blending is
-// SRC_ALPHA/ONE_MINUS_SRC_ALPHA for colour and ZERO/ONE for alpha.
+// Legacy vanilla-image fade. Alpha is the vanilla weight.
 
 layout(binding = 0) uniform sampler2D vanillaColor;
 layout(binding = 1) uniform sampler2D vanillaDepth;

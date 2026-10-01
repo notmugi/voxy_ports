@@ -1,6 +1,5 @@
 #version 460 core
-//Use quad shuffling to compute fragment mip
-//#extension GL_KHR_shader_subgroup_quad: enable
+// Use quad shuffling to compute fragment mip
 #ifdef USE_SINGLE_TRI
 #define USE_NV_BARRY
 #endif
@@ -18,10 +17,7 @@ layout(std430, binding = 6) readonly buffer NativeSections { ivec4 nativeSection
 
 #endif
 
-//#define DEBUG_RENDER
-
-//TODO: need to fix when merged quads have discardAlpha set to false but they span multiple tiles
-// however they are not a full block
+// TODO: Alpha coverage on merged partial blocks.
 
 layout(location = 0) in flat uvec4 interData;
 #ifndef USE_NV_BARRY
@@ -29,8 +25,7 @@ layout(location = 1) in vec2 uv;
 #endif
 layout(location = 2) in vec3 vPos;
 
-// Screen-door dissolve of LODs approaching the native chunk border, so vanilla
-// chunks fade in instead of the LODs popping. Works for opaque and translucent.
+// Iris border dither.
 float lodBorderBayer(vec2 p) {
     ivec2 i = ivec2(p) & 3;
     const mat4 b = mat4(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
@@ -41,12 +36,11 @@ float lodBorderBayer(vec2 p) {
 layout(location = 7) in flat uint quadDebug;
 #endif
 
-
 #ifndef PATCHED_SHADER
 layout(location = 0) out vec4 outColour;
 #else
 
-//Bind the model buffer and import the model system as we need it
+// Bind the model buffer and import the model system as we need it
 #define MODEL_BUFFER_BINDING 3
 #import <voxy:lod/block_model.glsl>
 
@@ -74,10 +68,6 @@ bool leafHasNativeSection(vec3 cameraRelative, uint face) {
 vec4 uint2vec4RGBA(uint colour) {
     return vec4((uvec4(colour)>>uvec4(24,16,8,0))&uvec4(0xFF))/255.0;
 }
-
-//bool useMipmaps() {
-//    return (interData.x&2u)==0u;
-//}
 
 uint tintingState() {
     return (interData.x>>2)&3u;
@@ -111,10 +101,9 @@ vec2 getBaseUV() {
     return modelUV + (vec2(face>>1, face&1u) * (1.0/(vec2(3.0, 2.0)*256.0)));
 }
 
-
 #ifdef PATCHED_SHADER
 struct VoxyFragmentParameters {
-    //TODO: pass in derivative data
+    // TODO: pass in derivative data
     vec4 sampledColour;
     vec2 tile;
     vec2 uv;
@@ -122,18 +111,18 @@ struct VoxyFragmentParameters {
     uint modelId;
     vec2 lightMap;
     vec4 tinting;
-    uint customId;//Same as iris's modelId
+    uint customId;// Same as iris's modelId
 };
 
 void voxy_emitFragment(VoxyFragmentParameters parameters);
 #else
 
 vec4 computeColour(vec2 texturePos, vec4 colour) {
-    //Conditional tinting, TODO: FIXME: this is better but still not great, try encode data into the top bit of alpha so its per pixel
+    // TODO: Store per-pixel tint coverage.
 
     uint tintingFunction = tintingState();
-    bool doTint = tintingFunction==2;//Always tint if function == 2
-    if (tintingFunction == 1) {//partial tint
+    bool doTint = tintingFunction==2;// Always tint if function == 2
+    if (tintingFunction == 1) {// partial tint
         vec4 tintTest = textureLod(blockModelAtlas, texturePos, 0);
         if (abs(tintTest.r-tintTest.g) < 0.02f && abs(tintTest.g-tintTest.b) < 0.02f) {
             doTint = true;
@@ -146,7 +135,6 @@ vec4 computeColour(vec2 texturePos, vec4 colour) {
 }
 
 #endif
-
 
 #if defined(TRANSLUCENT) && !defined(PATCHED_SHADER)
 layout(binding = 3) uniform sampler2D iceOpaqueDepth;
@@ -210,8 +198,7 @@ void main() {
             return;
         }
     }
-    //vec2 uv = vec2(0);
-    //Tile is the tile we are in
+    // Tile is the tile we are in
     vec2 tile;
     #ifdef USE_NV_BARRY
     #ifdef USE_SINGLE_TRI
@@ -223,8 +210,7 @@ void main() {
     #endif
 
     vec2 uvFrac = modf(uv, tile);
-    // uv exactly on the far quad edge lands one tile past the end. Fold it back
-    // into the last tile instead of punching a hole.
+    // Keep the far edge in the last tile.
     vec2 lastTile = vec2((interData.x>>8)&0xFu, (interData.x>>12)&0xFu);
     bvec2 pastEnd = greaterThan(tile, lastTile);
     tile = min(tile, lastTile);
@@ -236,27 +222,20 @@ void main() {
     float texelInset = exp2(mip)/32.0;
     vec2 filteredTexPos = clamp(uvFrac, vec2(texelInset), vec2(1.0-texelInset))*atlasTileScale + getBaseUV();
     vec4 colour;
-//This is deprecated, TODO: remove the non mip code path
-    //if (useMipmaps())
+// This is deprecated, TODO: remove the non mip code path
     {
         vec2 uvSmol = uv*(1.0/(vec2(3.0,2.0)*256.0));
-        vec2 dx = dFdx(uvSmol);//vec2(lDx, dDx);
-        vec2 dy = dFdy(uvSmol);//vec2(lDy, dDy);
+        vec2 dx = dFdx(uvSmol);// vec2(lDx, dDx);
+        vec2 dy = dFdy(uvSmol);// vec2(lDy, dDy);
         colour = textureGrad(blockModelAtlas, filteredTexPos, dx, dy);
     }// else {
-    //    colour = textureLod(blockModelAtlas, texPos, 0);
-    //}
 
-    //If we are in shaders and are a helper invocation, just exit, as it enables extra performance gains for small sized
-    // fragments, we do this here after derivative computation
-    //Trying it with all shaders
-    //#ifdef PATCHED_SHADER
+    // Derivatives must run before helper invocations exit.
     #ifndef PATCHED_SHADER_ALLOW_DERIVATIVES
     if (gl_HelperInvocation) {
         return;
     }
     #endif
-    //#endif
 
     // tile is clamped above; no fragment is ever outside the quad's tiles.
 
@@ -295,17 +274,14 @@ void main() {
     if (fadeNativeOverlap != (cutoutFadePass == 1)) discard;
 #endif
 
-
-    //Also, small quad is really fking over the mipping level somehow
+    // Test alpha at mip 0 to retain small faces.
     #ifndef TRANSLUCENT
     colour.a = 1.0f;
     if (useDiscard() && (textureLod(blockModelAtlas, texPos, 0).a <= 0.1f)) {
-    //if (useDiscard() && (colour.a <= 0.1f)) {
     #else
     if (textureLod(blockModelAtlas, texPos, 0).a == 0.0f) {
     #endif
-        //This is stupidly stupidly bad for divergence
-        //TODO: FIXME, basicly what this do is sample the exact pixel (no lod) for discarding, this stops mipmapping fucking it over
+
         #ifndef DEBUG_RENDER
         discard;
         return;
@@ -342,8 +318,8 @@ void main() {
     uint modelId = getModelId();
     BlockModel model = modelData[modelId];
     uint tintingFunction = tintingState();
-    bool doTint = tintingFunction==2;//Always tint if function == 2
-    if (tintingFunction==1) {//Partial tint
+    bool doTint = tintingFunction==2;// Always tint if function == 2
+    if (tintingFunction==1) {// Partial tint
         vec4 tintTest = texture(blockModelAtlas, texPos, -2);
         if (abs(tintTest.r-tintTest.g) < 0.02f && abs(tintTest.g-tintTest.b) < 0.02f) {
             doTint = true;
@@ -360,30 +336,4 @@ void main() {
 
     #endif
 }
-
-
-
-//#ifdef GL_KHR_shader_subgroup_quad
-/*
-uint hash = (uint(tile.x)*(1<<16))^uint(tile.y);
-uint horiz = subgroupQuadSwapHorizontal(hash);
-bool sameTile = horiz==hash;
-uint sv = mix(uint(-1), hash, sameTile);
-uint vert = subgroupQuadSwapVertical(sv);
-sameTile = sameTile&&vert==hash;
-mipBias = sameTile?0:-5.0;
-*/
-/*
-vec2 uvSmol = uv*(1.0/(vec2(3.0,2.0)*256.0));
-float lDx = subgroupQuadSwapHorizontal(uvSmol.x)-uvSmol.x;
-float lDy = subgroupQuadSwapVertical(uvSmol.y)-uvSmol.y;
-float dDx = subgroupQuadSwapDiagonal(lDx);
-float dDy = subgroupQuadSwapDiagonal(lDy);
-vec2 dx = vec2(lDx, dDx);
-vec2 dy = vec2(lDy, dDy);
-colour = textureGrad(blockModelAtlas, filteredTexPos, dx, dy);
-*/
-//#else
-//colour = texture(blockModelAtlas, texPos);
-//#endif
 

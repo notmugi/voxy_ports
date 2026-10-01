@@ -4,6 +4,7 @@ import me.cortex.voxy.client.core.gl.GlTexture;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.util.DepthFramebuffer;
 import org.joml.Matrix4f;
+
 import static org.lwjgl.opengl.GL45C.*;
 
 /** Separate native and LOD water layers, mixed once with premultiplied alpha. */
@@ -23,7 +24,8 @@ public final class TranslucentBorderFade {
         this.pending = false;
         this.capturing = false;
         this.viewport = viewport;
-        this.start = range[0]; this.end = range[1];
+        this.start = range[0];
+        this.end = range[1];
         if (this.lod.resize(viewport.width, viewport.height)) {
             this.nativeLayer.resize(viewport.width, viewport.height);
             for (int depth : new int[]{this.lod.getDepthTex().id, this.nativeLayer.getDepthTex().id}) {
@@ -31,7 +33,10 @@ public final class TranslucentBorderFade {
                 glTextureParameteri(depth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 glTextureParameteri(depth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
             }
-            if (this.lodColour != null) { this.lodColour.free(); this.nativeColour.free(); }
+            if (this.lodColour != null) {
+                this.lodColour.free();
+                this.nativeColour.free();
+            }
             this.lodColour = colour(viewport.width, viewport.height);
             this.nativeColour = colour(viewport.width, viewport.height);
             this.lod.framebuffer.bind(GL_COLOR_ATTACHMENT0, this.lodColour).verify();
@@ -50,15 +55,19 @@ public final class TranslucentBorderFade {
         return texture;
     }
 
-    public void bindLod() { this.lod.bind(); }
+    public void bindLod() {
+        this.lod.bind();
+    }
     public void ready(float[] params, float[] colour) {
         System.arraycopy(params, 0, this.fogParams, 0, 4);
         System.arraycopy(colour, 0, this.fogColour, 0, 4);
         this.pending = true;
     }
-    public void cancel() { this.pending = false; }
+    public void cancel() {
+        this.pending = false;
+    }
 
-    // Called after Sodium begins the translucent pass, before any native draws.
+    // Capture before Sodium submits native translucents.
     public void beginNative() {
         if (!this.pending || this.capturing) return;
         this.pending = false;
@@ -69,10 +78,15 @@ public final class TranslucentBorderFade {
         try (State ignored = new State()) {
             this.nativeLayer.bind();
             glViewport(0, 0, this.viewport.width, this.viewport.height);
-            glDisable(GL_STENCIL_TEST); glDisable(GL_BLEND); glDisable(GL_CULL_FACE);
-            glEnable(GL_DEPTH_TEST); glDepthFunc(GL_ALWAYS); glDepthMask(true);
+            glDisable(GL_STENCIL_TEST);
+            glDisable(GL_BLEND);
+            glDisable(GL_CULL_FACE);
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_ALWAYS);
+            glDepthMask(true);
             glColorMask(false, false, false, false);
-            glBindSampler(0, 0); glBindTextureUnit(0, depth);
+            glBindSampler(0, 0);
+            glBindTextureUnit(0, depth);
             this.depthCopy.blit();
             glClearTexImage(this.nativeColour.id, 0, GL_RGBA, GL_FLOAT, new float[4]);
         }
@@ -80,15 +94,18 @@ public final class TranslucentBorderFade {
         this.capturing = true;
     }
 
-    // Called before Sodium ends the same pass. No LOD geometry is submitted twice.
+    // Composite before Sodium ends the translucent pass.
     public void endNative() {
         if (!this.capturing) return;
         this.capturing = false;
         try (State ignored = new State()) {
             glBindFramebuffer(GL_FRAMEBUFFER, this.target);
             glViewport(0, 0, this.viewport.width, this.viewport.height);
-            glDisable(GL_STENCIL_TEST); glDisable(GL_CULL_FACE);
-            glEnable(GL_DEPTH_TEST); glDepthFunc(GL_ALWAYS); glDepthMask(true);
+            glDisable(GL_STENCIL_TEST);
+            glDisable(GL_CULL_FACE);
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_ALWAYS);
+            glDepthMask(true);
             glColorMask(true, true, true, true);
             glEnable(GL_BLEND);
             glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
@@ -100,18 +117,28 @@ public final class TranslucentBorderFade {
             glUniformMatrix4fv(1, false, new Matrix4f(this.viewport.MVP).invert().get(matrix));
             glUniformMatrix4fv(2, false, nativeMatrix.get(matrix));
             glUniform2f(3, this.start, this.end);
-            glUniform4fv(4, this.fogParams); glUniform4fv(5, this.fogColour);
+            glUniform4fv(4, this.fogParams);
+            glUniform4fv(5, this.fogColour);
             int[] textures = {this.nativeColour.id, this.nativeLayer.getDepthTex().id, this.lodColour.id,
                     this.lod.getDepthTex().id, this.viewport.depthBoundingBuffer.getDepthTex().id};
-            for (int i = 0; i < textures.length; i++) { glBindSampler(i, 0); glBindTextureUnit(i, textures[i]); }
+            for (int i = 0; i < textures.length; i++) {
+                glBindSampler(i, 0);
+                glBindTextureUnit(i, textures[i]);
+            }
             this.composite.blit();
         }
         glBindFramebuffer(GL_FRAMEBUFFER, this.target);
     }
 
     public void free() {
-        this.lod.free(); this.nativeLayer.free(); this.depthCopy.delete(); this.composite.delete();
-        if (this.lodColour != null) { this.lodColour.free(); this.nativeColour.free(); }
+        this.lod.free();
+        this.nativeLayer.free();
+        this.depthCopy.delete();
+        this.composite.delete();
+        if (this.lodColour != null) {
+            this.lodColour.free();
+            this.nativeColour.free();
+        }
     }
 
     // Raw GL calls must leave Sodium's cached state unchanged.
@@ -126,24 +153,38 @@ public final class TranslucentBorderFade {
         final boolean blend = glIsEnabled(GL_BLEND), cull = glIsEnabled(GL_CULL_FACE), mask = glGetBoolean(GL_DEPTH_WRITEMASK);
         final int[] viewport = new int[4], colours = new int[4], textures = new int[5], samplers = new int[5];
         State() {
-            glGetIntegerv(GL_VIEWPORT, this.viewport); glGetIntegerv(GL_COLOR_WRITEMASK, this.colours);
+            glGetIntegerv(GL_VIEWPORT, this.viewport);
+            glGetIntegerv(GL_COLOR_WRITEMASK, this.colours);
             for (int i = 0; i < 5; i++) {
-                glActiveTexture(GL_TEXTURE0+i); this.textures[i] = glGetInteger(GL_TEXTURE_BINDING_2D);
+                glActiveTexture(GL_TEXTURE0+i);
+                this.textures[i] = glGetInteger(GL_TEXTURE_BINDING_2D);
                 this.samplers[i] = glGetIntegeri(GL_SAMPLER_BINDING, i);
             }
             glActiveTexture(this.active);
         }
         public void close() {
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this.draw); glBindFramebuffer(GL_READ_FRAMEBUFFER, this.read);
-            glUseProgram(this.program); glBindVertexArray(this.vao);
-            glDepthFunc(this.depthFunc); glDepthMask(this.mask);
-            set(GL_DEPTH_TEST, this.depth); set(GL_STENCIL_TEST, this.stencil); set(GL_BLEND, this.blend); set(GL_CULL_FACE, this.cull);
-            glBlendFuncSeparate(this.src, this.dst, this.srcA, this.dstA); glBlendEquationSeparate(this.eq, this.eqA);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this.draw);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, this.read);
+            glUseProgram(this.program);
+            glBindVertexArray(this.vao);
+            glDepthFunc(this.depthFunc);
+            glDepthMask(this.mask);
+            set(GL_DEPTH_TEST, this.depth);
+            set(GL_STENCIL_TEST, this.stencil);
+            set(GL_BLEND, this.blend);
+            set(GL_CULL_FACE, this.cull);
+            glBlendFuncSeparate(this.src, this.dst, this.srcA, this.dstA);
+            glBlendEquationSeparate(this.eq, this.eqA);
             glColorMask(this.colours[0]!=0, this.colours[1]!=0, this.colours[2]!=0, this.colours[3]!=0);
             glViewport(this.viewport[0], this.viewport[1], this.viewport[2], this.viewport[3]);
-            for (int i = 0; i < 5; i++) { glBindTextureUnit(i, this.textures[i]); glBindSampler(i, this.samplers[i]); }
+            for (int i = 0; i < 5; i++) {
+                glBindTextureUnit(i, this.textures[i]);
+                glBindSampler(i, this.samplers[i]);
+            }
             glActiveTexture(this.active);
         }
-        private static void set(int flag, boolean enabled) { if (enabled) glEnable(flag); else glDisable(flag); }
+        private static void set(int flag, boolean enabled) {
+            if (enabled) glEnable(flag); else glDisable(flag);
+        }
     }
 }

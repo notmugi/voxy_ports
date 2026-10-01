@@ -64,15 +64,15 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         this.traversal = traversal;
     }
 
-    //Allows pipelines to configure model baking system
+    // Allows pipelines to configure model baking system
     public void setupExtraModelBakeryData(ModelBakerySubsystem modelService) {}
 
-    public final void setSectionRenderer(AbstractSectionRenderer<?,?> sectionRenderer) {//Stupid java ordering not allowing something pre super
+    public final void setSectionRenderer(AbstractSectionRenderer<?,?> sectionRenderer) {// Stupid java ordering not allowing something pre super
         if (this.sectionRenderer != null) throw new IllegalStateException();
         this.sectionRenderer = sectionRenderer;
     }
 
-    //Called before the pipeline starts running, used to update uniforms etc
+    // Called before the pipeline starts running, used to update uniforms etc
     public void preSetup(Viewport<?> viewport) {
 
     }
@@ -132,7 +132,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
             glUniform1f(3, 0);
         }
 
-        // Depth writes require the depth test to be enabled, even with GL_ALWAYS.
+        // GL_ALWAYS still needs the depth test enabled.
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_ALWAYS);
         glEnable(GL_STENCIL_TEST);
@@ -149,17 +149,16 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
 
     private static final long SCRATCH = MemoryUtil.nmemAlloc(4*4*4);
     protected static void transformBlitDepth(FullscreenBlit blitShader, int srcDepthTex, int dstFB, Viewport<?> viewport, Matrix4f targetTransform) {
-        // at this point the dst frame buffer doesn't have a stencil attachment so we don't need to keep the stencil test on for the blit
-        // in the worst case the dstFB does have a stencil attachment causing this pass to become 'corrupted'
+        // The target stencil must not mask the composite.
         glDisable(GL_STENCIL_TEST);
         glBindFramebuffer(GL30.GL_FRAMEBUFFER, dstFB);
 
         blitShader.bind();
         glBindTextureUnit(0, srcDepthTex);
         new Matrix4f(viewport.MVP).invert().getToAddress(SCRATCH);
-        nglUniformMatrix4fv(1, 1, false, SCRATCH);//inverse fromProjection
-        targetTransform.getToAddress(SCRATCH);//new Matrix4f(tooProjection).mul(vp.modelView).get(data);
-        nglUniformMatrix4fv(2, 1, false, SCRATCH);//tooProjection
+        nglUniformMatrix4fv(1, 1, false, SCRATCH);// inverse fromProjection
+        targetTransform.getToAddress(SCRATCH);// new Matrix4f(tooProjection).mul(vp.modelView).get(data);
+        nglUniformMatrix4fv(2, 1, false, SCRATCH);// tooProjection
 
         glEnable(GL_DEPTH_TEST);
         blitShader.blit();
@@ -169,7 +168,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
 
     protected void innerPrimaryWork(Viewport<?> viewport, int depthBuffer) {
 
-        //Compute the mip chain
+        // Compute the mip chain
         viewport.hiZBuffer.buildMipChain(depthBuffer, viewport.width, viewport.height);
 
         do {
@@ -177,14 +176,13 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
             TimingStatistics.dynamic.start();
 
             TimingStatistics.D.start();
-            //Tick download stream
+            // Tick download stream
             DownloadStream.INSTANCE.tick();
             TimingStatistics.D.stop();
 
             this.nodeManager.tick(this.traversal.getNodeBuffer(), this.nodeCleaner);
-            //glFlush();
 
-            this.nodeCleaner.tick(this.traversal.getNodeBuffer());//Probably do this here??
+            this.nodeCleaner.tick(this.traversal.getNodeBuffer());// Probably do this here??
 
             TimingStatistics.dynamic.stop();
             TimingStatistics.main.start();
@@ -209,10 +207,9 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         RenderStatistics.addDebug(debug);
     }
 
-    //Binds the framebuffer and any other bindings needed for rendering
+    // Binds the framebuffer and any other bindings needed for rendering
     public abstract void setupAndBindOpaque(Viewport<?> viewport);
     public abstract void setupAndBindTranslucent(Viewport<?> viewport);
-
 
     public void bindUniforms() {
         this.bindUniforms(-1);
@@ -221,7 +218,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
     public void bindUniforms(int index) {
     }
 
-    //null means no function, otherwise return the taa injection function
+    // null means no function, otherwise return the taa injection function
     public String taaFunction(String functionName) {
         return this.taaFunction(-1, functionName);
     }
@@ -230,17 +227,17 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         return null;
     }
 
-    //null means dont transform the shader
+    // null means dont transform the shader
     public String patchOpaqueShader(AbstractSectionRenderer<?,?> renderer, String input) {
         return null;
     }
 
-    //Returning null means apply the same patch as the opaque
+    // Returning null means apply the same patch as the opaque
     public String patchTranslucentShader(AbstractSectionRenderer<?,?> renderer, String input) {
         return null;
     }
 
-    //Null means no scaling factor
+    // Null means no scaling factor
     public float[] getRenderScalingFactor() {return null;}
 
 }

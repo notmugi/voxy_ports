@@ -9,7 +9,7 @@ import org.joml.*;
 import java.lang.reflect.Field;
 
 public abstract class Viewport <A extends Viewport<A>> {
-    //public final HiZBuffer2 hiZBuffer = new HiZBuffer2();
+    // public final HiZBuffer2 hiZBuffer = new HiZBuffer2();
     public final HiZBuffer hiZBuffer = new HiZBuffer();
     public final DepthFramebuffer depthBoundingBuffer = new DepthFramebuffer();
     public GlBuffer nativeSectionMembership;
@@ -90,13 +90,13 @@ public abstract class Viewport <A extends Viewport<A>> {
     }
 
     public A update() {
-        //MVP
+        // MVP
         this.projection.mul(this.modelView, this.MVP);
 
-        //Update the frustum
+        // Update the frustum
         this.frustum.set(this.MVP, false);
 
-        //Translation vectors
+        // Translation vectors
         int sx = Mth.floor(this.cameraX)>>5;
         int sy = Mth.floor(this.cameraY)>>5;
         int sz = Mth.floor(this.cameraZ)>>5;

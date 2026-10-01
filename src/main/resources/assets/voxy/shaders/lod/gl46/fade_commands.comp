@@ -13,7 +13,7 @@ void main() {
         DrawCommand command = source[i];
         SectionMeta section = sections[lookup[command.baseInstance]];
         uint flags = section.a.z;
-        // Old meshes without flags remain eligible. No cached geometry rebuild required.
+        // Keep meshes without flags.
         if ((flags & 0x80000000u) != 0u && (flags & 0x40000000u) == 0u) continue;
         uint dst = atomicAdd(counts[11],1u);
         outputCommands[dst] = command;

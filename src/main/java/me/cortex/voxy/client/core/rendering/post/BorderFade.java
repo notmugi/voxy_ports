@@ -13,8 +13,7 @@ import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 import static org.lwjgl.opengl.GL45C.glGetFramebufferAttachmentParameteri;
 import static org.lwjgl.opengl.GL45C.glTextureParameteri;
 
-// Cross-fades the pre-LOD vanilla image with the composited image across the
-// vanilla render border. Distance is reconstructed per pixel from vanilla depth.
+// Legacy vanilla-image fade pass.
 public class BorderFade {
     private final FullscreenBlit blit = new FullscreenBlit("voxy:post/fullscreen2.vert", "voxy:post/border_fade.frag");
     private GlTexture colorCopy;
@@ -22,7 +21,7 @@ public class BorderFade {
     private int height = -1;
     private int depthTex = -1;
 
-    //Copies the current framebuffer's colour; remembers its depth for apply().
+    // Copies the current framebuffer's colour; remembers its depth for apply().
     public boolean capture(int fb, int width, int height) {
         this.depthTex = -1;
         if (glGetFramebufferAttachmentParameteri(fb, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE) != GL_TEXTURE) {
@@ -52,8 +51,8 @@ public class BorderFade {
         return true;
     }
 
-    //Draws the vanilla image back over the framebuffer with the fade weight.
-    //Depth test and writes are off, so sampling the attached depth is legal.
+    // Draws the vanilla image back over the framebuffer with the fade weight.
+    // Depth test and writes are off, so sampling the attached depth is legal.
     public void apply(Matrix4f vanillaProjection, Matrix4f modelView, float fadeStart, float fadeEnd) {
         if (this.depthTex < 0) {
             return;

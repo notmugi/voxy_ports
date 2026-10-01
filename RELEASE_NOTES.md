@@ -1,5 +1,5 @@
 - Fixed transparent block rendering on LODs
-- Added crossfade between LODs and normal render distance
+- Added crossfade between LODs and normal render distance, enabled by default. Working on this gave me a better idea of where Distant Horizons' performance hit comes from.
 - Improved crossfade performance
 - Added support for Duckhunt's foliage tint mod
 - Fixed water and ice seams

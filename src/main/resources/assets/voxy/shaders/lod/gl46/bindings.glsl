@@ -7,7 +7,7 @@ layout(binding = 0, std140) uniform SceneUniform {
     vec2 lodFadeRange;
 };
 
-//TODO: see if making the stride 2*4*4 bytes or something cause you get that 16 byte write
+// TODO: see if making the stride 2*4*4 bytes or something cause you get that 16 byte write
 struct DrawCommand {
     uint  count;
     uint  instanceCount;
@@ -16,11 +16,9 @@ struct DrawCommand {
     uint  baseInstance;
 };
 
-
 #ifdef BLOCK_MODEL_TEXTURE_BINDING
 layout(binding = BLOCK_MODEL_TEXTURE_BINDING) uniform sampler2D blockModelAtlas;
 #endif
-
 
 #ifndef Quad
 #define Quad ivec2

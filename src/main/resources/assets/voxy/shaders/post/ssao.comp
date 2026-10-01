@@ -31,17 +31,9 @@ vec2 scale;
 vec4 reDeProject(vec3 pos) {
     vec4 view = MVP * vec4(pos, 1.0);
     view.xy /= view.w;
-    vec2 samplePos = view.xy*0.5+0.5;//Does not change reguardless of depth state
+    vec2 samplePos = view.xy*0.5+0.5;// Does not change reguardless of depth state
     samplePos = clamp((vec2(ivec2(samplePos*size))+0.5)*scale, vec2(0.0f), vec2(1.0f));
     view.xy = samplePos;
-
-    /*
-    vec4 depths = textureGather(depthTex, UV);
-
-    vec2 dummy;
-    vec2 frac = modf(UV*size, dummy);
-    vec2 depths2 = mix(depths.wz, depths.xy, frac.y);
-    float depth = mix(depths2.x, depths2.y, frac.x);*/
 
     float depth = texture(depthTex, view.xy).x;
 
@@ -81,16 +73,14 @@ float computeAO(vec3 uvDepth, vec3 normal) {
         return 1.0f;
     }
 
-
     ao = pow(ao,0.15f);
 
     return clamp(((1.0f-ao)/3.0f+(2.0f/3.0f)), 0,1);
 }
 #endif
 
-
 #ifdef BETTER_SSAO
-//Based on photons ssao https://github.com/sixthsurge/photon/blob/40adec318ea608d9f9ba88fcc272730af0899a62/shaders/include/lighting/ao/ssao.glsl
+// Based on photons ssao https:// github.com/sixthsurge/photon/blob/40adec318ea608d9f9ba88fcc272730af0899a62/shaders/include/lighting/ao/ssao.glsl
 // used with permission
 
 #ifndef SSAO_STEPS
@@ -120,7 +110,6 @@ vec2 get_ssao_sample_offset(int step_index, vec2 dither) {
 }
 #define SSAO_MAX_RADIUS_SCREEN 0.1
 #define SSAO_RADIUS 1.5f
-
 
 vec2 r2(int n, vec2 seed) {
     const vec2 alpha = 1.0 / vec2(phi2, phi2 * phi2);
@@ -175,28 +164,24 @@ float computeAO(vec3 uvDepth, vec3 worldNorm)
             SSAO_MAX_RADIUS_SCREEN
         ));
 
-
-
     float ao = 0.0;
 
     for (int i = 0; i < SSAO_STEPS; ++i) {
-        //TODO: note get_ssao_sample_offset(i, vec2(0.5)) is CONSTANT (its the same every frame for every sample, can move it into a const array or compute it during compile)
+        // TODO: note get_ssao_sample_offset(i, vec2(0.5)) is CONSTANT (its the same every frame for every sample, can move it into a const array or compute it during compile)
 
         #ifdef USE_GENERATED_SAMPLE_POINTS
         vec2 sample_uv = clamp(uvDepth.xy + sample_matrix * SAMPLE_POINTS[i], vec2(0), vec2(1));
         #else
         vec2 sample_uv = clamp(uvDepth.xy + sample_matrix*get_ssao_sample_offset(i, vec2(0.5f)), vec2(0), vec2(1));
-        //vec2 sample_uv = clamp(uvDepth.xy + sample_matrix*get_ssao_sample_offset(i, r2(int(gl_GlobalInvocationID.x*982379281+gl_GlobalInvocationID.y+18711)%8192)), vec2(0), vec2(1));
         #endif
         sample_uv = (vec2(ivec2(sample_uv*size))+0.5)*scale;
         float depth = texture(depthTex, sample_uv).x;
 
-
-        if (depth == FAR || depth == uvDepth.z) {//TODO FIXME: check depth == uvDepth.z isnt causing any other strange issues (might be better to compare the sample uv instead)
+        if (depth == FAR || depth == uvDepth.z) {// TODO FIXME: check depth == uvDepth.z isnt causing any other strange issues (might be better to compare the sample uv instead)
             continue;
         }
         vec3 offset_view;// = rev3d(invProj, vec3(sample_uv, depth));
-        if (depth == NEAR) {//Assume vanilla
+        if (depth == NEAR) {// Assume vanilla
             depth = texture(sourceDepthTex, sample_uv).x;
             if (depth == FAR) {
                 continue;
@@ -214,7 +199,7 @@ float computeAO(vec3 uvDepth, vec3 worldNorm)
         float slen = dot(offset_view,offset_view);
         if (slen < 1e-8) continue;
         /*
-        //TODO THIS BUT IN WORLDSPACE CHECK
+        // TODO THIS BUT IN WORLDSPACE CHECK
         if (slen>9.0f) {
             continue;
         }*/
@@ -231,29 +216,17 @@ float computeAO(vec3 uvDepth, vec3 worldNorm)
 
 #endif
 
-
-
-
-
-
-
-
-
-
-
-
-
 vec3 face2norm(uint face) {
     return vec3(uint((face>>1)==2), uint((face>>1)==0), uint((face>>1)==1)) * (float(int(face)&1)*2-1);
 }
 
 void main() {
-    size = imageSize(colourTexOut);//TODO: dont use imageSize as it is slow, swap for uniform
+    size = imageSize(colourTexOut);// TODO: dont use imageSize as it is slow, swap for uniform
     if (any(lessThanEqual(size, gl_GlobalInvocationID.xy))) {
         return;
     }
     scale = vec2(1.0f)/size;
-    vec2 point = vec2(vec2(gl_GlobalInvocationID.xy)+0.5f)*scale;//Offset to the center of the textile
+    vec2 point = vec2(vec2(gl_GlobalInvocationID.xy)+0.5f)*scale;// Offset to the center of the textile
     if (cutoutOnly && (uint(round(texture(colourTex, point).a*255.0)) & 128u) == 0u) {
         imageStore(colourTexOut, ivec2(gl_GlobalInvocationID.xy), vec4(0));
         return;
@@ -269,7 +242,6 @@ void main() {
             uint face = metadata&7u;
             uint lod = (metadata>>3)&7u;
             bool hasAO = (metadata&(1<<6))!=0;
-
 
             ocolour = colour;
             ocolour.w = 1.0f;

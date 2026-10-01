@@ -7,11 +7,11 @@ struct BlockModel {
     uint _pad[6];
 };
 
-//TODO: FIXME: this isnt actually correct cause depending on the face (i think) it could be 1/64 th of a position off
+// TODO: FIXME: this isnt actually correct cause depending on the face (i think) it could be 1/64 th of a position off
 // but im going to assume that since we are dealing with huge render distances, this shouldent matter that much
 float extractFaceIndentation(uint faceData) {
     uint enc = (faceData>>16)&63u;
-    enc += uint(enc==63u);//convert 63 to 64 cause of pain reasons
+    enc += uint(enc==63u);// convert 63 to 64 cause of pain reasons
     return float(enc)/64.0;
 }
 
@@ -23,7 +23,7 @@ uint faceHasAlphaCuttout(uint faceData) {
     return (faceData>>22)&1u;
 }
 
-//TODO: try and get rid of
+// TODO: try and get rid of
 uint faceHasAlphaCuttoutOverride(uint faceData) {
     return (faceData>>23)&1u;
 }
