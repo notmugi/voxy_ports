@@ -1,3 +1,9 @@
+## 1.1.2
+
+- fixed leaf texture sampling neighboring pixels
+
+## 1.1 / 1.1.1
+
 - Fixed transparent block rendering on LODs
 - Added crossfade between LODs and normal render distance, enabled by default. Working on this gave me a better idea of where Distant Horizons' performance hit comes from.
 - Improved crossfade performance

@@ -70,10 +70,6 @@ public class MipGen {
     }
 
     public static void putTextures(boolean darkened, ColourDepthTextureData[] textures, MemoryBuffer into) {
-        putTextures(darkened, textures, into, false);
-    }
-
-    public static void putTextures(boolean darkened, ColourDepthTextureData[] textures, MemoryBuffer into, boolean fillLeafHoles) {
         //if (MODEL_TEXTURE_SIZE != 16) {throw new IllegalStateException("THIS METHOD MUST BE REDONE IF THIS CONST CHANGES");}
 
         //TODO: need to use a write mask to see what pixels must be used to contribute to mipping
@@ -88,7 +84,6 @@ public class MipGen {
             int j = 0;
             boolean anyTransparent = false;
             for (int t : textures[i].colour()) {
-                if (fillLeafHoles && (t >>> 24) <= 25) t &= 0x00FFFFFF;
                 int o = ((y+(j>>LAYERS))*LENGTH_B + ((j&(MODEL_TEXTURE_SIZE-1))+x))*4; j++;//LAYERS here is just cause faster
                 //t = ((t&0xFF000000)==0)?0x00_FF_00_FF:t;//great for testing
                 MemoryUtil.memPutInt(addr+o, t);
@@ -97,7 +92,7 @@ public class MipGen {
             solidMsk |= (anyTransparent?1:0)<<i;
         }
 
-        if (!darkened || fillLeafHoles) {
+        if (!darkened) {
             solidify(addr, solidMsk);
         }
 

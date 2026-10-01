@@ -681,7 +681,9 @@ public class ModelFactory {
 
         // TODO callback to inject extra data into the model data
 
-        MipGen.putTextures(darkenedTinting, textureData, uploadResult.texture, blockState.getBlock() instanceof LeavesBlock);
+        // Preserve low-alpha RGB: opaque LOD leaves display these dark texels.
+        // Reclassifying them as holes and dilating RGB changes the leaf pattern.
+        MipGen.putTextures(darkenedTinting, textureData, uploadResult.texture);
 
         // Set the mapping at the very end
         this.idMappings[blockId] = modelId;
