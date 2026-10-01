@@ -78,6 +78,7 @@ public class RenderDataFactory {
     private int maxZ;
 
     private int quadCount = 0;
+    private boolean hasFadeCutouts;
 
     private final OccupancySet occupancy = new OccupancySet();
 
@@ -202,6 +203,10 @@ public class RenderDataFactory {
     }
 
     private void storeQuad(int buffer, long quad) {
+        if (buffer != 0 && !this.hasFadeCutouts) {
+            long metadata = this.modelMan.getModelMetadataFromClientId((int)(quad >>> 26) & 0xFFFF);
+            this.hasFadeCutouts = (metadata & (1L << 55)) != 0;
+        }
         int index = this.quadCounters[buffer];
         if (index >= (1 << 16)) throw new IllegalStateException("Section directional quad capacity exceeded");
         this.quadCounters[buffer]++;
@@ -645,6 +650,25 @@ public class RenderDataFactory {
         }
     }
 
+    private boolean sameFluidNeighbor(long quad, long metadata, long neighbor) {
+        if (Mapper.isAir(neighbor) || !ModelQueries.cullsSame(metadata)) return false;
+        int modelId = this.modelMan.getModelId(Mapper.getBlockId(neighbor));
+        long neighborMetadata = this.modelMan.getModelMetadataFromClientId(modelId);
+        if (ModelQueries.containsFluid(neighborMetadata)) {
+            modelId = this.modelMan.getFluidClientStateId(modelId);
+        } else if (!ModelQueries.isFluid(neighborMetadata)) {
+            return false;
+        }
+        return modelId == ((quad >> 26) & 0xFFFF);
+    }
+
+    // Same self-culling non-fluid models (ice, glass) share no wall, even across mixed cells.
+    private boolean sameNonFluidNeighbor(long quad, long metadata, long neighbor) {
+        if (Mapper.isAir(neighbor) || !ModelQueries.cullsSame(metadata)) return false;
+        if (ModelQueries.containsFluid(metadata) || ModelQueries.isFluid(metadata)) return false;
+        return this.modelMan.getModelId(Mapper.getBlockId(neighbor)) == ((quad >> 26) & 0xFFFF);
+    }
+
     private void generateYZFluidOuterGeometry(int axis) {
         this.blockMesher.doAuxiliaryFaceOffset = false;
         //Hacky generate section side faces (without check neighbor section)
@@ -653,7 +677,7 @@ public class RenderDataFactory {
             this.blockMesher.auxiliaryPosition = layer;
             int cSkips = 0;
 
-            // Check if this direction faces vanilla-rendered chunks (never cull if so)
+            // Keep solid-terrain gap-fill at the native boundary.
             // For Y axis (axis=1): -y is bit 2, +y is bit 3
             // For Z axis (axis=2): -z is bit 4, +z is bit 5
             boolean facesVanilla = (this.vanillaBoundaryMask & (1 << (axis * 2 + side))) != 0;
@@ -698,26 +722,19 @@ public class RenderDataFactory {
                             A &= ~0b110L; A |= getQuadTyping(B);
                         }
 
+                        // Mixed cells still share water; don't add a wall between them.
+                        if (this.sameFluidNeighbor(A, B, neighborId)) {
+                            this.blockMesher.skip(1);
+                            continue;
+                        }
+
                         //Check and test if can cull W.R.T neighbor
-                        // Check if current block has mixed flag (it's a boundary surface - never cull its faces)
+                        // Keep gap-fill against solid terrain at mixed boundaries.
                         boolean selfIsMixed = (this.mixedMasks[pidx] & (1 << index)) != 0;
-                        // Don't cull if neighbor is marked as mixed (was mipped from air+solid region)
-                        // Also don't cull if SELF is mixed (this block is a boundary surface)
-                        // Also don't cull if this direction faces vanilla-rendered chunks
                         boolean neighborIsMixed = Mapper.isMixed(neighborId);
                         if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanilla) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
                             int modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
                             long meta = this.modelMan.getModelMetadataFromClientId(modelId);
-                            if (ModelQueries.containsFluid(meta)) {
-                                modelId = this.modelMan.getFluidClientStateId(modelId);
-                            }
-                            if (ModelQueries.cullsSame(B)) {
-                                if (modelId == ((A>>26)&0xFFFF)) {
-                                    this.blockMesher.skip(1);
-                                    continue;
-                                }
-                            }
-
                             if (CHECK_NEIGHBOR_FACE_OCCLUSION) {
                                 if (ModelQueries.faceOccludes(meta, (axis << 1) | (1 - side))) {
                                     this.blockMesher.skip(1);
@@ -851,7 +868,9 @@ public class RenderDataFactory {
                         // Also don't cull if SELF is mixed (this block is a boundary surface)
                         // Also don't cull if this direction faces vanilla-rendered chunks
                         boolean neighborIsMixed = Mapper.isMixed(neighborId);
-                        if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanilla) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
+                        if (this.sameNonFluidNeighbor(A, B, neighborId)) {
+                            fail = true;
+                        } else if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanilla) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
                             int modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
 
 
@@ -887,11 +906,13 @@ public class RenderDataFactory {
                         fail &= ModelQueries.faceCanBeOccluded(B, (axis << 1) | side);
                         failB &= ModelQueries.faceCanBeOccluded(B, (axis << 1) | (1 - side));
 
-                        //TODO: LIGHTING
+                        //Faces pointing out of the section light from the block across the
+                        // boundary, inward faces from the in-section neighbour.
+                        long outwardLight = Integer.toUnsignedLong(Mapper.getLightId(neighborId)) << 55;
                         if (ModelQueries.faceExists(B, (axis<<1)|1) && ((side==1&&!fail) || (side==0&&!failB))) {
                             this.blockMesher.putNext((long) (false ? 0L : 1L) |
-                                    A |
-                                    0//((ModelQueries.faceUsesSelfLighting(B, (axis<<1)|1)?A:) & (0xFFL << 55))
+                                    (A & ~LM) |
+                                    (ModelQueries.faceUsesSelfLighting(B, (axis<<1)|1) ? (A&LM) : (side==1 ? outwardLight : (nA&LM)))
                             );
                         } else {
                             this.blockMesher.skip(1);
@@ -899,8 +920,8 @@ public class RenderDataFactory {
 
                         if (ModelQueries.faceExists(B, (axis<<1)|0) && ((side==0&&!fail) || (side==1&&!failB))) {
                             this.seondaryblockMesher.putNext((long) (true ? 0L : 1L) |
-                                    A |
-                                    0//(((0xFFL) & 0xFF) << 55)
+                                    (A & ~LM) |
+                                    (ModelQueries.faceUsesSelfLighting(B, (axis<<1)|0) ? (A&LM) : (side==0 ? outwardLight : (nA&LM)))
                             );
                         } else {
                             this.seondaryblockMesher.skip(1);
@@ -1321,7 +1342,7 @@ public class RenderDataFactory {
         ma.doAuxiliaryFaceOffset = false;
         mb.doAuxiliaryFaceOffset = false;
 
-        // Check if -x or +x direction faces vanilla-rendered chunks (never cull if so)
+        // Keep solid-terrain gap-fill at the native boundary.
         boolean facesVanillaNegX = (this.vanillaBoundaryMask & (1 << 0)) != 0;  // bit 0 = -x
         boolean facesVanillaPosX = (this.vanillaBoundaryMask & (1 << 1)) != 0;  // bit 1 = +x
 
@@ -1333,7 +1354,6 @@ public class RenderDataFactory {
                 int msk = this.fluidMasks[i];
                 if ((msk & 1) != 0) {//-x
                     long neighborId = this.neighboringFaces[i];
-                    boolean oki = true;
 
                     int sidx = (i<<5) * 2;
                     long A = this.sectionData[sidx];
@@ -1350,12 +1370,10 @@ public class RenderDataFactory {
                         A &= ~0b110L; A |= getQuadTyping(Am);
                     }
 
+                    boolean oki = !this.sameFluidNeighbor(A, Am, neighborId);
 
-                    // Check if current block has mixed flag (it's a boundary surface - never cull its faces)
+                    // Keep gap-fill against solid terrain at mixed boundaries.
                     boolean selfIsMixed = (this.mixedMasks[i] & 1) != 0;
-                    // Don't cull if neighbor is marked as mixed (was mipped from air+solid region)
-                    // Also don't cull if SELF is mixed (this block is a boundary surface)
-                    // Also don't cull if this direction faces vanilla-rendered chunks
                     boolean neighborIsMixed = Mapper.isMixed(neighborId);
                     if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanillaNegX) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
 
@@ -1368,16 +1386,6 @@ public class RenderDataFactory {
                         //Check neighbor face
                         if (CHECK_NEIGHBOR_FACE_OCCLUSION) {
                             if (ModelQueries.faceOccludes(meta, (2 << 1) | (1-0))) {
-                                oki = false;
-                            }
-                        }
-
-                        if (ModelQueries.containsFluid(meta)) {
-                            modelId = this.modelMan.getFluidClientStateId(modelId);
-                        }
-
-                        if (ModelQueries.cullsSame(Am)) {
-                            if (modelId == ((A>>26)&0xFFFF)) {
                                 oki = false;
                             }
                         }
@@ -1401,7 +1409,6 @@ public class RenderDataFactory {
 
                 if ((msk & (1<<31)) != 0) {//+x
                     long neighborId = this.neighboringFaces[i+32*32];
-                    boolean oki = true;
 
 
                     int sidx = (i*32+31) * 2;
@@ -1415,15 +1422,13 @@ public class RenderDataFactory {
                         int fluidId = this.modelMan.getFluidClientStateId(modelId);
                         A |= Integer.toUnsignedLong(fluidId)<<26;
                         Am = this.modelMan.getModelMetadataFromClientId(fluidId);
+                        A = (A & ~0b110L) | getQuadTyping(Am);
                     }
 
+                    boolean oki = !this.sameFluidNeighbor(A, Am, neighborId);
 
-
-                    // Check if current block has mixed flag (it's a boundary surface - never cull its faces)
+                    // Keep gap-fill against solid terrain at mixed boundaries.
                     boolean selfIsMixed = (this.mixedMasks[i] & (1<<31)) != 0;
-                    // Don't cull if neighbor is marked as mixed (was mipped from air+solid region)
-                    // Also don't cull if SELF is mixed (this block is a boundary surface)
-                    // Also don't cull if this direction faces vanilla-rendered chunks
                     boolean neighborIsMixed = Mapper.isMixed(neighborId);
                     if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanillaPosX) {//Not air and not mixed (neither self nor neighbor) and not facing vanilla
                         int modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
@@ -1435,16 +1440,6 @@ public class RenderDataFactory {
                         //Check neighbor face
                         if (CHECK_NEIGHBOR_FACE_OCCLUSION) {
                             if (ModelQueries.faceOccludes(meta, (2 << 1) | (1-1))) {
-                                oki = false;
-                            }
-                        }
-
-                        if (ModelQueries.containsFluid(meta)) {
-                            modelId = this.modelMan.getFluidClientStateId(modelId);
-                        }
-
-                        if (ModelQueries.cullsSame(Am)) {
-                            if (modelId == ((A>>26)&0xFFFF)) {
                                 oki = false;
                             }
                         }
@@ -1636,7 +1631,7 @@ public class RenderDataFactory {
                     // If neighbor is mixed, treat it as air for culling purposes (don't cull faces)
                     // Also don't cull if this direction faces vanilla-rendered chunks
                     boolean neighborIsMixed = Mapper.isMixed(neighborId);
-                    if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanillaNegX) {//Not air and not mixed and not facing vanilla
+                    if (Mapper.getBlockId(neighborId) != 0 && ((!neighborIsMixed && !selfIsMixed && !facesVanillaNegX) || this.sameNonFluidNeighbor(A, Am, neighborId))) {//Not air and not mixed and not facing vanilla, or a shared wall between like models
                         modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
                         nM = this.modelMan.getModelMetadataFromClientId(modelId);
                     }
@@ -1663,7 +1658,7 @@ public class RenderDataFactory {
                     // If neighbor is mixed, treat it as air for culling purposes (don't cull faces)
                     // Also don't cull if this direction faces vanilla-rendered chunks
                     boolean neighborIsMixed = Mapper.isMixed(neighborId);
-                    if (Mapper.getBlockId(neighborId) != 0 && !neighborIsMixed && !selfIsMixed && !facesVanillaPosX) {//Not air and not mixed and not facing vanilla
+                    if (Mapper.getBlockId(neighborId) != 0 && ((!neighborIsMixed && !selfIsMixed && !facesVanillaPosX) || this.sameNonFluidNeighbor(A, Am, neighborId))) {//Not air and not mixed and not facing vanilla, or a shared wall between like models
                         modelId = this.modelMan.getModelId(Mapper.getBlockId(neighborId));
                         nM = this.modelMan.getModelMetadataFromClientId(modelId);
                     }
@@ -1743,6 +1738,7 @@ public class RenderDataFactory {
         //We must reset _everything_ that could have changed as we dont exactly know the state due to how the model id exception
         // throwing system works
         this.quadCount = 0;
+        this.hasFadeCutouts = false;
 
         {//Reset all the block meshes
             this.blockMesher.reset();
@@ -1826,7 +1822,8 @@ public class RenderDataFactory {
             coff += size;
         }
 
-        int aabb = 0;
+        // Upper AABB bits are unused by position/size decoding. Bit31 marks valid flags.
+        int aabb = Integer.MIN_VALUE | (this.hasFadeCutouts ? (1 << 30) : 0);
         aabb |= this.minX;
         aabb |= this.minY<<5;
         aabb |= this.minZ<<10;

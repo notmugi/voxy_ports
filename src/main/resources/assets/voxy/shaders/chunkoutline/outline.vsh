@@ -31,7 +31,8 @@ void main() {
     ivec3 origin = unpackPos(chunkPos[id])*16;
     origin -= section.xyz;
 
-    if (!shouldRender(origin)) {
+    // Sodium already culled render-list entries.
+    if (section.w == 0 && !shouldRender(origin)) {
         gl_Position = vec4(-100.0f, -100.0f, -100.0f, 0.0f);
         return;
     }

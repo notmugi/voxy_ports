@@ -3,6 +3,8 @@ layout(binding = 0, std140) uniform SceneUniform {
     ivec3 baseSectionPos;
     uint frameId;
     vec3 cameraSubPos;
+    // x = fade start; y > 0: Iris dither, y < 0: normal cross-fade, y = 0: off.
+    vec2 lodFadeRange;
 };
 
 //TODO: see if making the stride 2*4*4 bytes or something cause you get that 16 byte write

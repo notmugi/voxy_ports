@@ -30,6 +30,7 @@ public class VoxyConfig {
     public int serviceThreads = 2;
     public float subDivisionSize = 63.497753f;
     public boolean renderVanillaFog = false;
+    public boolean borderFade = true;
     public boolean massiveClouds = true;
     public int cloudHeight = 400;
     public int cloudCellSize = 72;

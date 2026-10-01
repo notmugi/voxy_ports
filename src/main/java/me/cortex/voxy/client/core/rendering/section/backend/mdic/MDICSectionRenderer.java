@@ -19,6 +19,8 @@ import me.cortex.voxy.client.core.rendering.util.SharedIndexBuffer;
 import me.cortex.voxy.client.core.rendering.util.UploadStream;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.client.config.VoxyConfig;
+import me.cortex.voxy.client.core.util.IrisUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Direction;
 import org.joml.Matrix4f;
@@ -51,6 +53,8 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
     private static final int TRANSLUCENT_OFFSET = OPAQUE_DRAW_COUNT;//in draw calls
     private static final int TEMPORAL_OFFSET = TRANSLUCENT_OFFSET+TRANSLUCENT_DRAW_COUNT;//in draw calls
     private static final int STATISTICS_BUFFER_BINDING = 8;
+    private final Shader fadeCommandShader = Shader.make()
+            .add(ShaderType.COMPUTE, "voxy:lod/gl46/fade_commands.comp").compile();
     private final Shader terrainShader;
     private final Shader translucentTerrainShader;
 
@@ -149,6 +153,23 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         MemoryUtil.memPutInt(ptr, viewport.frameId&0x7fffffff); ptr += 4;
         viewport.innerTranslation.getToAddress(ptr); ptr += 4*3;
 
+        ptr += 4;//std140 padding to the next member
+        float fadeStart = 0;
+        float fadeEnd = 0;//disabled; negative means normal-pipeline fade
+        // The vanilla pipeline gets the post-process cross-fade instead.
+        if (VoxyConfig.CONFIG.borderFade && IrisUtil.irisShaderPackEnabled()) {
+            float border = Minecraft.getInstance().options.renderDistance().get() * 16.0f;
+            fadeStart = Math.max(8.0f, border - Math.min(32.0f, border * 0.25f));
+            fadeEnd = border;
+        } else if (VoxyConfig.CONFIG.borderFade) {
+            // Negative end: no dither, only lifts native-overlap culling inside the band.
+            float[] range = me.cortex.voxy.client.core.NormalRenderPipeline.borderFadeRange();
+            fadeStart = range[0];
+            fadeEnd = -range[1];
+        }
+        MemoryUtil.memPutFloat(ptr, fadeStart); ptr += 4;
+        MemoryUtil.memPutFloat(ptr, fadeEnd); ptr += 4;
+
         UploadStream.INSTANCE.commit();
     }
 
@@ -181,6 +202,12 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         glBindVertexArray(GlVertexArray.STATIC_VAO);//Needs to be before binding
         this.pipeline.setupAndBindOpaque(viewport);
         this.bindRenderingBuffers(viewport);
+        if (this.pipeline instanceof me.cortex.voxy.client.core.NormalRenderPipeline normal) {
+            org.lwjgl.opengl.GL20C.glUniform1i(8, normal.isCutoutFadePass() ? 1 : 0);
+            org.lwjgl.opengl.GL20C.glUniform1i(9, viewport.nativeSectionTableSize);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6,
+                    viewport.nativeSectionMembership == null ? 0 : viewport.nativeSectionMembership.id);
+        }
 
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT|GL_SHADER_STORAGE_BARRIER_BIT);//Barrier everything is needed
         glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
@@ -188,7 +215,27 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         if (VoxyClient.getOcclusionDebugState()==3) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         }
-        glMultiDrawElementsIndirectCountARB(GL_TRIANGLES, GL_UNSIGNED_SHORT, indirectOffset, drawCountOffset, maxDrawCount, 0);
+        boolean fade = this.pipeline instanceof me.cortex.voxy.client.core.NormalRenderPipeline normal && normal.isCutoutFadePass();
+        if (fade) {
+            if (viewport.fadeDrawBuffer == null) viewport.fadeDrawBuffer = new GlBuffer(OPAQUE_DRAW_COUNT*20L);
+            viewport.drawCountCallBuffer.zeroRange(44, 4);
+            this.fadeCommandShader.bind();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, viewport.drawCallBuffer.id);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, viewport.drawCountCallBuffer.id);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.fadeDrawBuffer.id);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, this.geometryManager.getMetadataBuffer().id);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, viewport.indirectLookupBuffer.id);
+            glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
+            glDispatchComputeIndirect(0);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
+            this.terrainShader.bind();
+            this.bindRenderingBuffers(viewport);
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.fadeDrawBuffer.id);
+            glMultiDrawElementsIndirectCountARB(GL_TRIANGLES, GL_UNSIGNED_SHORT, 0, 44, OPAQUE_DRAW_COUNT, 0);
+        } else {
+            glMultiDrawElementsIndirectCountARB(GL_TRIANGLES, GL_UNSIGNED_SHORT, indirectOffset, drawCountOffset, maxDrawCount, 0);
+        }
         if (VoxyClient.getOcclusionDebugState()==3) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
@@ -225,6 +272,9 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         glBindVertexArray(GlVertexArray.STATIC_VAO);//Needs to be before binding
         this.pipeline.setupAndBindTranslucent(viewport);
         this.bindRenderingBuffers(viewport);
+        if (this.pipeline instanceof me.cortex.voxy.client.core.NormalRenderPipeline normal) {
+            normal.bindIceContactAO(viewport);
+        }
 
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT|GL_SHADER_STORAGE_BARRIER_BIT);//Barrier everything is needed
         glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
@@ -367,6 +417,7 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         this.distanceCountBuffer.free();
         this.translucentTerrainShader.free();
         this.terrainShader.free();
+        this.fadeCommandShader.free();
         this.commandGenShader.free();
         this.cullShader.free();
         this.prepShader.free();

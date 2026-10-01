@@ -20,6 +20,8 @@
   "voxy.config.general.environmental_fog.tooltip": "Fog on distant LODs",
   "voxy.config.general.render_fog": "Enable render fog",
   "voxy.config.general.render_fog.tooltip": "Enables fog effects",
+  "voxy.config.general.border_fade": "Chunk border fade",
+  "voxy.config.general.border_fade.tooltip": "LODs dissolve in at the vanilla chunk border instead of popping in",
   "voxy.config.general.massive_clouds": "Massive distant clouds",
   "voxy.config.general.massive_clouds.tooltip": "Voxy's own clouds, replaces vanilla. overrides other cloud settings",
   "voxy.config.general.render_statistics": "Enable render statistics",

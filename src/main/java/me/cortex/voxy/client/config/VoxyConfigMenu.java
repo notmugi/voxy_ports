@@ -58,6 +58,7 @@ public final class VoxyConfigMenu implements ConfigEntryPoint {
             c.sectionRenderDistance=v;var renderer=IGetVoxyRenderSystem.getNullable();if(renderer!=null)renderer.setRenderDistance(v);
         },v->Component.literal(""+(v*32)),false));
         rendering.addOption(bool(b,"vanilla_fog","voxy.config.general.render_fog",d.renderVanillaFog,()->c.renderVanillaFog,v->c.renderVanillaFog=v));
+        rendering.addOption(bool(b,"border_fade","voxy.config.general.border_fade",d.borderFade,()->c.borderFade,v->c.borderFade=v));
         rendering.addOption(bool(b,"clouds","voxy.config.general.massive_clouds",d.massiveClouds,()->c.massiveClouds,v->c.massiveClouds=v));
         rendering.addOption(bool(b,"statistics","voxy.config.general.render_statistics",d.renderStatistics,()->RenderStatistics.enabled,v->RenderStatistics.enabled=v).setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD));
         var clouds=b.createOptionGroup();

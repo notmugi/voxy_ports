@@ -1,0 +1,11 @@
+- Fixed transparent block rendering on LODs
+- Added crossfade between LODs and normal render distance
+- Improved crossfade performance
+- Added support for Duckhunt's foliage tint mod
+- Fixed water and ice seams
+- Fixed overlapping ice faces
+- Fixed snow layer gaps and overlapping block edges
+- Fixed leaf culling near normal chunks
+- Fixed water and ice disappearing at a distance
+- Fixed water and ice brightness differences caused by blending
+- Added contact shading to ice

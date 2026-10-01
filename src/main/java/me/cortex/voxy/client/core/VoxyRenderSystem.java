@@ -33,6 +33,7 @@ import me.cortex.voxy.common.thread.ServiceManager;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.commonImpl.VoxyCommon;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
+import net.caffeinemc.mods.sodium.client.render.chunk.lists.ChunkRenderListIterable;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
@@ -73,6 +74,7 @@ public class VoxyRenderSystem {
     private final ViewportSelector<?> viewportSelector;
 
     private final AbstractRenderPipeline pipeline;
+    private final me.cortex.voxy.client.core.rendering.post.BorderFade borderFade = new me.cortex.voxy.client.core.rendering.post.BorderFade();
 
     private static AbstractSectionRenderer.Factory<?,? extends IGeometryData> getRenderBackendFactory() {
         //TODO: need todo a thing where selects optimal section render based on if supports the pipeline and geometry data type
@@ -212,10 +214,29 @@ public class VoxyRenderSystem {
     }
 
     public void renderOpaque(Viewport<?> viewport) {
+        this.renderOpaque(viewport, null);
+    }
+
+    public void renderOpaque(Viewport<?> viewport, ChunkRenderListIterable renderLists) {
         if (viewport == null) {
             return;
         }
 
+        // Raw GL changes must not desynchronize vanilla's cached blend state.
+        boolean blendEnabled = glIsEnabled(GL_BLEND);
+        int srcRgb = glGetInteger(GL_BLEND_SRC_RGB), dstRgb = glGetInteger(GL_BLEND_DST_RGB);
+        int srcAlpha = glGetInteger(GL_BLEND_SRC_ALPHA), dstAlpha = glGetInteger(GL_BLEND_DST_ALPHA);
+        int equationRgb = glGetInteger(GL_BLEND_EQUATION_RGB), equationAlpha = glGetInteger(GL_BLEND_EQUATION_ALPHA);
+        try {
+            this.renderOpaqueInternal(viewport, renderLists);
+        } finally {
+            glBlendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);
+            glBlendEquationSeparate(equationRgb, equationAlpha);
+            if (blendEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+        }
+    }
+
+    private void renderOpaqueInternal(Viewport<?> viewport, ChunkRenderListIterable renderLists) {
         TimingStatistics.resetSamplers();
 
         long startTime = System.nanoTime();
@@ -252,9 +273,10 @@ public class VoxyRenderSystem {
 
         TimingStatistics.E.start();
         if ((!VoxyClient.disableSodiumChunkRender())&&!IrisUtil.irisShadowActive()) {
-            this.chunkBoundRenderer.render(viewport);
+            this.chunkBoundRenderer.render(viewport, renderLists);
         } else {
             viewport.depthBoundingBuffer.clear(0);
+            viewport.nativeSectionTableSize = 0;
         }
         TimingStatistics.E.stop();
 
@@ -263,7 +285,6 @@ public class VoxyRenderSystem {
         //The entire rendering pipeline (excluding the chunkbound thing)
         this.pipeline.runPipeline(viewport, boundFB, dims[2], dims[3]);
         GPUTiming.INSTANCE.marker();
-
 
         TimingStatistics.main.stop();
         TimingStatistics.postDynamic.start();
@@ -414,6 +435,14 @@ public class VoxyRenderSystem {
         this.renderDistanceTracker.setRenderDistance(renderDistance);
     }
 
+    public void beginNativeTranslucent() {
+        if (this.pipeline instanceof NormalRenderPipeline normal) normal.beginNativeTranslucent();
+    }
+
+    public void endNativeTranslucent() {
+        if (this.pipeline instanceof NormalRenderPipeline normal) normal.endNativeTranslucent();
+    }
+
     public Viewport<?> getViewport() {
         if (IrisUtil.irisShadowActive()) {
             return null;
@@ -467,6 +496,7 @@ public class VoxyRenderSystem {
         } catch (Exception e) {Logger.error("Error shutting down renderer components", e);}
         Logger.info("Shutting down render pipeline");
         try {this.pipeline.free();} catch (Exception e){Logger.error("Error releasing render pipeline", e);}
+        try {this.borderFade.free();} catch (Exception e){Logger.error("Error releasing border fade", e);}
 
 
 

@@ -31,7 +31,12 @@ import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.TransparentBlock;
+import net.minecraft.world.level.block.StainedGlassPaneBlock;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.IceBlock;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.EmptyBlockGetter;
@@ -66,6 +71,8 @@ import static org.lwjgl.opengl.GL11.*;
 //TODO: NOTE!!! is it worth even uploading as a 16x16 texture, since automatic lod selection... doing 8x8 textures might be perfectly ok!!!
 // this _quarters_ the memory requirements for the texture atlas!!! WHICH IS HUGE saving
 public class ModelFactory {
+    private static final TagKey<Block> GLASS_BLOCKS = TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath("c", "glass_blocks"));
+    private static final TagKey<Block> GLASS_PANES = TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath("c", "glass_panes"));
     public static final int MODEL_TEXTURE_SIZE = 16;
     public static final int LAYERS = Integer.numberOfTrailingZeros(MODEL_TEXTURE_SIZE);
 
@@ -369,6 +376,14 @@ public class ModelFactory {
         boolean isFluid = blockState.getBlock() instanceof LiquidBlock;
         // Only tag the fluid model, not waterlogged hosts.
         lightingFlags |= isFluid ? 1 << 9 : 0;
+        // Leave connected glass to the native renderer.
+        boolean isGlass = blockState.getBlock() instanceof TransparentBlock
+                || blockState.getBlock() instanceof StainedGlassPaneBlock
+                || blockState.is(Blocks.GLASS_PANE)
+                || blockState.is(GLASS_BLOCKS) || blockState.is(GLASS_PANES);
+        lightingFlags |= isGlass ? 1 << 10 : 0;
+        boolean isIce = blockState.getBlock() instanceof IceBlock;
+        lightingFlags |= isIce ? 1 << 11 : 0;
         int modelId = -1;
 
 
@@ -568,8 +583,8 @@ public class ModelFactory {
 
             metadata |= canBeOccluded?4:0;
 
-            //Face uses its own lighting if its not flat against the adjacent block & isnt traslucent
-            metadata |= (offset > 0.01 || blockRenderLayer == RenderType.translucent())?0b1000:0;
+            // Ice's boundary faces use the neighbour light, like Sodium.
+            metadata |= (offset > 0.01 || (blockRenderLayer == RenderType.translucent() && !isIce))?0b1000:0;
 
 
 
@@ -612,6 +627,7 @@ public class ModelFactory {
         }
 
         metadata |= fullyOpaque?(1L<<(48+6)):0;
+        metadata |= (lightingFlags & 3840) != 0 ? (1L << 55) : 0; // native-overlap material
 
         boolean canBeCorrectlyRendered = true;//This represents if a model can be correctly (perfectly) represented
         // i.e. no gaps
@@ -629,7 +645,7 @@ public class ModelFactory {
 
 
         //TODO: THIS
-        modelFlags |= lightingFlags;//shade 3, emission 4..7, leaf 8, fluid 9
+        modelFlags |= lightingFlags;//shade 3, emission 4..7, leaf 8, fluid 9, glass 10, ice 11
 
         //modelFlags |= blockRenderLayer == RenderLayer.getSolid()?0:1;// should discard alpha
         MemoryUtil.memPutInt(uploadPtr, modelFlags); uploadPtr += 4;
@@ -674,6 +690,12 @@ public class ModelFactory {
             MemoryUtil.memPutInt(uploadPtr, 0);
         } uploadPtr += 4;
 
+
+        // Keep the fluid top's sub-1/64 height so it meets native water.
+        if (isFluid && sizes[1] >= 0) {
+            float packedDepth = Math.min(Math.round(sizes[1] * 64), 62) / 64.0f;
+            MemoryUtil.memPutFloat(uploadPtr, sizes[1] - packedDepth);
+        }
 
         //Note: if the layer isSolid then need to fill all the points in the texture where alpha == 0 with the average colour
         // of the surrounding blocks but only within the computed face size bounds

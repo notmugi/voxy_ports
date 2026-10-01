@@ -19,12 +19,7 @@ ivec3 extractLoDPosition(uvec2 encPos) {
 }
 
 vec4 getFaceSize(uint faceData) {
-    float EPSILON = 0.00005f;
-
     vec4 faceOffsetsSizes = extractFaceSizes(faceData);
-
-    //Expand the quads by a very small amount (because of the subtraction after this also becomes an implicit add)
-    faceOffsetsSizes.xz -= vec2(EPSILON);
 
     //Make the end relative to the start
     faceOffsetsSizes.yw -= faceOffsetsSizes.xz;
@@ -66,9 +61,9 @@ uint makeQuadFlags(uint faceData, uint modelId, ivec2 quadSize, const in BlockMo
     #ifndef PATCHED_SHADER
     // Bit 7 marks loaded terrain overlap.
     #ifdef TRANSLUCENT
-    flags |= uint((model.flagsA & 512u) != 0u) << 7u; // fluids
+    flags |= uint((model.flagsA & 3584u) != 0u) << 7u; // fluids, glass and ice
     #else
-    flags |= uint((model.flagsA & 768u) != 0u) << 7u; // leaves and opaque fluids
+    flags |= uint((model.flagsA & 3840u) != 0u) << 7u; // leaves, fluids, glass and ice
     #endif
     #endif
 
@@ -132,7 +127,8 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
 
     attributes.x = packVec4(tinting);
     attributes.y = conditionalTinting;
-    attributes.z = addin|(face<<8);
+    attributes.z = addin|(face<<8)|uint((model.flagsA & 2048u) != 0u)<<16
+            |uint((model.flagsA & 256u) != 0u)<<17;
     #endif
 
     return attributes;
@@ -156,6 +152,9 @@ void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool genera
 
     vec4 faceSize = getFaceSize(faceData);
     float depthOffset = extractFaceIndentation(faceData);
+    if (face == 1u && (model.flagsA & 512u) != 0u) {
+        depthOffset += model.fluidTopDepthCorrection;
+    }
     // Stair patches reuse bits 42..45.
     uint geometryPatch = extractGeometryPatch(rawQuad);
     if ((geometryPatch & 8u) != 0u) {

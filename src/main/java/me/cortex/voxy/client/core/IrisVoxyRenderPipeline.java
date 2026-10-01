@@ -29,6 +29,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
     public final DepthFramebuffer fb = new DepthFramebuffer(GL_DEPTH24_STENCIL8);
     public final DepthFramebuffer fbTranslucent = new DepthFramebuffer(GL_DEPTH24_STENCIL8);
 
+    private final FullscreenBlit nativeDepthReset = new FullscreenBlit("voxy:post/fullscreen2.vert", "voxy:post/noop.frag");
     private final GlBuffer shaderUniforms;
 
     public IrisVoxyRenderPipeline(IrisVoxyRenderPipelineData data, AsyncNodeManager nodeManager, NodeCleaner nodeCleaner, HierarchicalOcclusionTraverser traversal, BooleanSupplier frexSupplier) {
@@ -79,6 +80,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         this.data.thePipeline = null;
 
         this.depthBlit.delete();
+        this.nativeDepthReset.delete();
         this.fb.free();
         this.fbTranslucent.free();
 
@@ -123,6 +125,19 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
 
     @Override
     protected void postOpaquePreTranslucent(Viewport<?> viewport) {
+        // Native depth isn't in Voxy's projection. Keep it out of shaderpack LOD depth.
+        this.fb.bind();
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(true);
+        glColorMask(false, false, false, false);
+        glDepthFunc(GL_ALWAYS);
+        glStencilFunc(GL_EQUAL, 0, 0xFF);
+        this.nativeDepthReset.blit();
+        glStencilFunc(GL_EQUAL, 1, 0xFF);
+        glDepthFunc(GL_LEQUAL);
+        glColorMask(true, true, true, true);
+        glTextureBarrier();
+
         int msk = GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT;
         if (true) {//TODO: make shader specified
             if (false) {//TODO: only do this if shader specifies

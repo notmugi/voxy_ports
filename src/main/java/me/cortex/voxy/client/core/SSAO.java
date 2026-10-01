@@ -127,7 +127,12 @@ public class SSAO {
     }
 
     public void computeSSAO(Viewport<?> viewport, GlTexture colourOut, GlTexture colourIn, GlTexture baseDepthTex, int sourceDepthTexture) {
+        this.computeSSAO(viewport, colourOut, colourIn, baseDepthTex, sourceDepthTexture, false);
+    }
+
+    public void computeSSAO(Viewport<?> viewport, GlTexture colourOut, GlTexture colourIn, GlTexture baseDepthTex, int sourceDepthTexture, boolean cutoutOnly) {
         this.ssaoCompute.bind();
+        org.lwjgl.opengl.GL20C.glUniform1i(8, cutoutOnly ? 1 : 0);
         //The matrices
         try (var stack = MemoryStack.stackPush()) {
             long ptr = stack.nmalloc(4*4*4);

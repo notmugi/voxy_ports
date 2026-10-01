@@ -12,6 +12,8 @@ public abstract class Viewport <A extends Viewport<A>> {
     //public final HiZBuffer2 hiZBuffer = new HiZBuffer2();
     public final HiZBuffer hiZBuffer = new HiZBuffer();
     public final DepthFramebuffer depthBoundingBuffer = new DepthFramebuffer();
+    public GlBuffer nativeSectionMembership;
+    public int nativeSectionTableSize;
 
     private static final Field planesField;
     static {
@@ -56,6 +58,7 @@ public abstract class Viewport <A extends Viewport<A>> {
     protected void delete0() {
         this.hiZBuffer.free();
         this.depthBoundingBuffer.free();
+        if (this.nativeSectionMembership != null) this.nativeSectionMembership.free();
     }
 
     public A setVanillaProjection(Matrix4fc projection) {

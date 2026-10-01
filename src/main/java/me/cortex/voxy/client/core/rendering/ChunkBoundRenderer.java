@@ -1,6 +1,7 @@
 package me.cortex.voxy.client.core.rendering;
 
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import me.cortex.voxy.client.VoxyClient;
 import me.cortex.voxy.client.compat.SodiumExtra;
@@ -15,6 +16,9 @@ import me.cortex.voxy.client.core.rendering.util.SharedIndexBuffer;
 import me.cortex.voxy.client.core.rendering.util.UploadStream;
 import me.cortex.voxy.common.Logger;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.SectionPos;
+import net.caffeinemc.mods.sodium.client.render.chunk.lists.ChunkRenderListIterable;
+import me.cortex.voxy.commonImpl.VoxyCommon;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
@@ -29,6 +33,7 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL30C.*;
 import static org.lwjgl.opengl.GL31.glDrawElementsInstanced;
 import static org.lwjgl.opengl.GL42.glDrawElementsInstancedBaseInstance;
+import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 //This is a render subsystem, its very simple in what it does
 // it renders an AABB around loaded chunks, thats it
@@ -39,6 +44,9 @@ public class ChunkBoundRenderer {
     private final Long2IntOpenHashMap chunk2idx = new Long2IntOpenHashMap(INIT_MAX_CHUNK_COUNT);
     private long[] idx2chunk = new long[INIT_MAX_CHUNK_COUNT];
     private final Shader rasterShader;
+    private final LongArrayList visibleSections = new LongArrayList();
+    private GlBuffer visibleChunkPosBuffer;
+    private int[] membershipScratch = new int[0];
 
     private final LongOpenHashSet addQueue = new LongOpenHashSet();
     private final LongOpenHashSet remQueue = new LongOpenHashSet();
@@ -76,7 +84,7 @@ public class ChunkBoundRenderer {
     }
 
     //Bind and render, changing as little gl state as possible so that the caller may configure how it wants to render
-    public void render(Viewport<?> viewport) {
+    public void render(Viewport<?> viewport, ChunkRenderListIterable renderLists) {
         if (!this.remQueue.isEmpty()) {
             boolean wasEmpty = this.chunk2idx.isEmpty();
             this.remQueue.forEach(this::_remPos);//TODO: REPLACE WITH SCATTER COMPUTE
@@ -95,7 +103,35 @@ public class ChunkBoundRenderer {
         }
         // Also clear after reset/last removal, including every active viewport.
         viewport.depthBoundingBuffer.clear(0);
-        if (this.chunk2idx.isEmpty()) return;
+        // Use Sodium's visible sections, including any modded distance rules.
+        int count;
+        if (renderLists != null) {
+            this.visibleSections.clear();
+            NativeSectionCollector.collect(renderLists, VoxyCommon.IS_MINE_IN_ABYSS, this.visibleSections::add);
+            count = this.visibleSections.size();
+            if (count == 0) { viewport.nativeSectionTableSize = 0; return; }
+            long size = count * 8L;
+            if (this.visibleChunkPosBuffer == null || this.visibleChunkPosBuffer.size() < size) {
+                UploadStream.INSTANCE.commit();
+                if (this.visibleChunkPosBuffer != null) this.visibleChunkPosBuffer.free();
+                this.visibleChunkPosBuffer = new GlBuffer(Math.max(INIT_MAX_CHUNK_COUNT * 8L, size * 2));
+            }
+            long positions = UploadStream.INSTANCE.upload(this.visibleChunkPosBuffer, 0, size);
+            for (int i = 0; i < count; i++) {
+                long pos = this.visibleSections.getLong(i);
+                MemoryUtil.memPutInt(positions + i * 8L, (int) pos);
+                MemoryUtil.memPutInt(positions + i * 8L + 4, (int) (pos >>> 32));
+            }
+        } else {
+            count = this.chunk2idx.size();
+            if (count == 0) { viewport.nativeSectionTableSize = 0; return; }
+        }
+
+        if (renderLists == null) {
+            this.visibleSections.clear();
+            for (int i = 0; i < count; i++) this.visibleSections.add(this.idx2chunk[i]);
+        }
+        this.uploadMembership(viewport);
 
         long ptr = UploadStream.INSTANCE.upload(this.uniformBuffer, 0, 128);
         long matPtr = ptr; ptr += 4*4*4;
@@ -106,7 +142,9 @@ public class ChunkBoundRenderer {
             int sx = (int)(viewport.cameraX);
             int sy = (int)(viewport.cameraY);
             int sz = (int)(viewport.cameraZ);
-            new Vector3i(sx, sy, sz).getToAddress(ptr); ptr += 4*4;
+            new Vector3i(sx, sy, sz).getToAddress(ptr);
+            MemoryUtil.memPutInt(ptr + 12, renderLists != null ? 1 : 0);
+            ptr += 4*4;
 
             var negInnerSec = new Vector3f(
                     (float) (viewport.cameraX - sx),
@@ -135,11 +173,13 @@ public class ChunkBoundRenderer {
         glBindVertexArray(GlVertexArray.STATIC_VAO);
         viewport.depthBoundingBuffer.bind();
         this.rasterShader.bind();
+        if (renderLists != null) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this.visibleChunkPosBuffer.id);
+        }
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SharedIndexBuffer.INSTANCE_BB_BYTE.id());
         this.pipeline.bindUniforms();
 
         //Batch the draws into groups of size 32
-        int count = this.chunk2idx.size();
         if (count >= 32) {
             glDrawElementsInstanced(GL_TRIANGLES, 6 * 2 * 3 * 32, GL_UNSIGNED_BYTE, 0, count/32);
         }
@@ -158,6 +198,40 @@ public class ChunkBoundRenderer {
         }
 
 
+    }
+
+    private void uploadMembership(Viewport<?> viewport) {
+        // Fade-off leaves need actual section membership, not a ray's furthest box.
+        if (!(this.pipeline instanceof me.cortex.voxy.client.core.NormalRenderPipeline)
+                || me.cortex.voxy.client.config.VoxyConfig.CONFIG.borderFade) {
+            viewport.nativeSectionTableSize = 0;
+            return;
+        }
+        int capacity = 1;
+        while (capacity < this.visibleSections.size()*2) capacity <<= 1;
+        if (this.membershipScratch.length < capacity*4) this.membershipScratch = new int[capacity*4];
+        int[] table = this.membershipScratch;
+        java.util.Arrays.fill(table, 0, capacity*4, 0);
+        for (int i = 0; i < this.visibleSections.size(); i++) {
+            long key = this.visibleSections.getLong(i);
+            int x = SectionPos.x(key), y = SectionPos.y(key), z = SectionPos.z(key);
+            int hash = x*73856093 ^ y*19349663 ^ z*83492791;
+            int slot = hash & (capacity-1);
+            while (table[slot*4+3] != 0) {
+                if (table[slot*4] == x && table[slot*4+1] == y && table[slot*4+2] == z) break;
+                slot = (slot+1)&(capacity-1);
+            }
+            table[slot*4] = x; table[slot*4+1] = y; table[slot*4+2] = z; table[slot*4+3] = 1;
+        }
+        long bytes = capacity*16L;
+        if (viewport.nativeSectionMembership == null || viewport.nativeSectionMembership.size() < bytes) {
+            UploadStream.INSTANCE.commit();
+            if (viewport.nativeSectionMembership != null) viewport.nativeSectionMembership.free();
+            viewport.nativeSectionMembership = new GlBuffer(bytes);
+        }
+        long ptr = UploadStream.INSTANCE.upload(viewport.nativeSectionMembership, 0, bytes);
+        for (int i = 0; i < capacity*4; i++) MemoryUtil.memPutInt(ptr+i*4L, table[i]);
+        viewport.nativeSectionTableSize = capacity;
     }
 
     private void _remPos(long pos) {
@@ -235,5 +309,6 @@ public class ChunkBoundRenderer {
         this.rasterShader.free();
         this.uniformBuffer.free();
         this.chunkPosBuffer.free();
+        if (this.visibleChunkPosBuffer != null) this.visibleChunkPosBuffer.free();
     }
 }
